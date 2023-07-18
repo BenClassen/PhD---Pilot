@@ -1,0 +1,935 @@
+---
+title: "On-Off morality pilot study2 - network analysis - MARKDOWN VERSION"
+output: html_document
+date: "2023-04-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(qualtRics)
+library(lsr)
+library(psych)
+library(car)
+library(dplyr)
+library(ggpubr)
+library(corrplot)
+library(Hmisc)
+library(knitr)
+library(openxlsx)
+library(tidyr)
+library(graphics)
+
+#Import Raw data
+raw <- read_survey("Pilot study - RAW2.csv")
+
+#Remove post-survey dummy participants
+df <- raw[-c(203, 204, 206, 207, 208),]
+rm(raw)
+
+#Relabel gender values
+df$gender <- as.factor(df$gender)
+levels(df$gender) <- c("female", "male", "another gender")
+
+#Relabel ethnicity values
+df$ethnicity <- as.factor(df$ethnicity)
+levels(df$ethnicity) <- c("African", "Asian", "Black or African American",
+                          "European", "Hispanic or Latino", "Middle Eastern", 
+                          "Non-Hispanic White", "Two or more races", 
+                          "Other ethnicity")
+
+#erroneous response of '14' to a 7 point measure of CD Off ER
+#human error with coding responses in qualtrics
+#replace scores of 14 with a value of 7 in cd off er column
+df["cd_off_er"][df["cd_off_er"] == 14] <- 7
+
+
+#Don't use scientific notation
+options(scipen = 999)
+
+
+
+
+
+
+
+
+        #Dealing with outliers#
+        
+#Almost all of the size of effect Q's have statistical outliers e.g.:
+boxplot.stats(df$bj_on_soe)                     #highest value 300mill
+
+#Therefore need to identify outliers and trim them
+
+#First create a function which trims down the top 95th percentile of responses
+#Because the outliers to size of effect questions are still valid, trimming
+#rather than excluding them is best option
+
+#First, create a new function
+
+fun <- function(x){  
+        quantiles <- quantile( x, c(.00, .95), na.rm = TRUE)
+        x[ x < quantiles[1] ] <- quantiles[1]
+        x[ x > quantiles[2] ] <- quantiles[2]
+        x
+}       #create function [fun()] which trims down the top 5% of responses
+
+df$bj_on_soe <- fun( df$bj_on_soe ) 
+        #apply the new function to a given size of effect variable
+df$bj_on_soe
+        #check variable was trimmed correctly
+
+#Identify outliers in size of effect variables and apply new function to them
+#Only trimming if the outlier is >3 times times bigger than the next 
+#largest response to the question.
+#Also, if the online variant is trimmed, trim the offline variant as well
+#(and vice versa)
+
+
+boxplot.stats(df$bj_off_soe)                    #2000 (next largest value is 100)
+df$bj_off_soe <- fun(df$bj_off_soe)             #apply trim function
+boxplot(df$bj_off_soe)                          #make boxplot of newly trimmed variable
+
+
+boxplot.stats(df$cd_on_soe)                     #1000 (next largest 250)
+df$cd_on_soe <- fun(df$cd_on_soe)
+boxplot(df$cd_on_soe)
+
+boxplot.stats(df$cd_off_soe)                    #150 (next largest 50)
+df$cd_off_soe <- fun(df$cd_off_soe)
+boxplot(df$cd_off_soe)                          #outlier isn't that big here, 
+                                #but the online version was trimmed, so
+                                #trimming both to keep on/off responses consistent   
+
+
+boxplot.stats(df$fn_on_soe)                     #300mill (next largest 1000)
+df$fn_on_soe <- fun(df$fn_on_soe)
+boxplot(df$fn_on_soe)
+
+boxplot.stats(df$fn_off_soe)                    #300mill (next largest 10000)
+df$fn_off_soe <- fun(df$fn_off_soe)
+boxplot(df$fn_off_soe)
+
+
+boxplot.stats(df$pf_on_soe)                     #1000 x2 (next largest 100)
+df$pf_on_soe <- fun(df$pf_on_soe)
+boxplot(df$pf_on_soe)
+
+boxplot.stats(df$pf_off_soe)                    #100 (next largest 30)
+df$pf_off_soe <- fun(df$pf_off_soe)
+boxplot(df$pf_off_soe)                          #no trim needed, but on was trimmed
+
+
+boxplot.stats(df$ec_on_soe)                     #1 bil (next largest 1000 x4)
+df$ec_on_soe <- fun(df$ec_on_soe)
+boxplot(df$ec_on_soe)
+
+boxplot.stats(df$ec_off_soe)                    #1 bil (next largest 2145)              
+df$ec_off_soe <- fun(df$ec_off_soe)
+boxplot(df$ec_off_soe)
+
+
+boxplot.stats(df$ftp_on_soe)                    #350 mil (next largest 1000 x3)
+df$ftp_on_soe <- fun(df$ftp_on_soe)
+boxplot(df$ftp_on_soe)
+
+boxplot.stats(df$ftp_off_soe)                   #350 mil (next 200)
+df$ftp_off_soe <- fun(df$ftp_off_soe)
+boxplot(df$ftp_off_soe)
+
+
+boxplot.stats(df$av_on_soe)                     #10mil (next largest 1978)        #note the discrepancy between largest soe for on/off anti-vax
+df$av_on_soe <- fun(df$av_on_soe)
+boxplot(df$av_on_soe)
+
+boxplot.stats(df$av_off_soe)                    #100 x 3 (next largest 25)
+df$av_off_soe <- fun(df$av_off_soe)
+boxplot(df$av_off_soe)
+
+
+boxplot.stats(df$ua_on_soe)                     #675 (next largest 500)
+                                                #no trim needed
+
+boxplot.stats(df$ua_off_soe)                    #942
+                                                #no trim needed
+
+boxplot.stats(df$mj_on_soe)                     #no no trim needed
+
+boxplot.stats(df$mj_off_soe)                    #no trim needed
+
+
+boxplot.stats(df$dd_on_soe)                     #no trim needed
+                                                
+boxplot.stats(df$dd_off_soe)                    #no trim needed
+
+
+boxplot.stats(df$sc_on_soe)                     #1000 (next largest 100 x 2)
+df$sc_on_soe <- fun(df$sc_on_soe)
+boxplot(df$sc_on_soe)
+
+boxplot.stats(df$sc_off_soe)                    #1000 (next largest 50)
+df$sc_off_soe <- fun(df$sc_off_soe)
+boxplot(df$sc_off_soe)
+
+
+boxplot.stats(df$de_on_soe)                     #1000 (next largest 58)
+df$de_on_soe <- fun(df$de_on_soe)
+boxplot(df$de_on_soe)
+
+boxplot.stats(df$de_off_soe)                    #no trim needed, but on was trimmed
+df$de_off_soe <- fun(df$de_off_soe)
+boxplot(df$de_off_soe)
+
+
+
+             ## Breaking down raw data into smaller components ##
+
+#create subset study conditions for each of the 3 scenario groups (sg1-sg3)
+
+sg1 <- subset(x = df,                     #create scen group 1 from df
+              
+              subset = bj_on_img > 0,     #find respondents who responded >0 to 
+                                          #first Q in this condition
+              
+              select = c(23:62))          #include all completed scale variables
+                                          #in the new scenario data frame
+sg2 <- subset(x = df,
+              subset = ec_on_img > 0,
+              select = c(63:102))
+
+sg3 <- subset(x = df,
+              subset = mj_on_img > 0,
+              select = c(103:142))
+
+#create subset groups for each pair of online/offline scenarios
+
+#scenario group 1
+
+bj <- subset(x = sg1,                    #bridge jumper
+             select = c(1:10))
+cd <- subset(x = sg1,                    #charity donation
+             select = c(11:20))
+fn <- subset(x = sg1,                    #fake news
+             select = c(21:30))
+pf <- subset(x = sg1,                    #public fight
+             select = c(31:40))
+
+#scenario  group 2
+
+ec <- subset(x = sg2,                    #explicit content
+             select = c(1:10))
+ftp <- subset(x = sg2,                   #f the police
+             select = c(11:20))
+av <- subset(x = sg2,                    #anti-vax
+             select = c(21:30))
+ua <- subset(x = sg2,                    #unfounded accusation
+             select = c(31:40))
+
+#scenario group 3
+
+mj <- subset(x = sg3,                    #mean joke
+             select = c(1:10))
+dd <- subset(x = sg3,                    #drug dealer
+             select = c(11:20))
+sc <- subset(x = sg3,                    #sexist comment
+             select = c(21:30))
+de <- subset(x = sg3,                    #drunk ex
+             select = c(31:40))
+        
+        
+#create subset groups for each of the on/off scenario variants
+
+#scenario group 1
+
+bj_on <- subset(x = sg1,                  #bridge jumper online
+             select = c(1:5))
+bj_off <- subset(x = sg1,                 #bridge jumper offline
+                 select = c(6:10))
+
+cd_on <- subset(x = sg1,                  #charity donation online
+                select = (11:15))
+cd_off <- subset(x = sg1,                 #charity donation offline
+                 select = c(16:20))
+
+fn_on <- subset(x = sg1,                  #fake news online
+                select = (21:25))
+fn_off <- subset(x = sg1,                 #fake news offline
+                select = (26:30))
+
+pf_on <- subset(x = sg1,                  #public fight online
+                select = (31:35))
+pf_off <- subset(x = sg1,                 #public fight offline
+                select = (36:40))
+
+#scenario group 2 
+
+ec_on <- subset(x = sg2,
+                select = (1:5))           #explicit content online
+ec_off <- subset(x = sg2,
+                select = (6:10))          #explicit content offline
+
+ftp_on <- subset(x = sg2,
+                select = (11:15))         #fuck the police online
+ftp_off <- subset(x = sg2,
+                select = (16:20))         #fuck the police offline
+
+av_on <- subset(x = sg2,
+                select = (21:25))         #anti-vax online
+av_off <- subset(x = sg2,
+                select = (26:30))         #anti-vax offline
+
+ua_on <- subset(x = sg2,
+                select = (31:35))         #unfounded accusation online
+ua_off <- subset(x = sg2,
+                select = (36:40))         #unfound accusation offline
+
+#scenario group 3
+
+mj_on <- subset(x = sg3,
+                select = (1:5))           #mean joke online
+mj_off <- subset(x = sg3,
+                select = (6:10))          #mean joke offline
+
+dd_on <- subset(x = sg3,
+                select = (11:15))         #drug dealer online
+dd_off <- subset(x = sg3,
+                select = (16:20))         #drug dealer offline
+
+sc_on <- subset(x = sg3,
+                select = (21:25))         #sexist comment online
+sc_off <- subset(x = sg3,
+                select = (26:30))         #sexist comment offline
+
+de_on <- subset(x = sg3,
+                select = (31:35))         #drunk ex online
+de_off <- subset(x = sg3,
+                select = (36:40))         #drunk ex offline
+
+#creating groups for each individual variable
+
+#note that because each scenario group has slightly different numbers of
+#resopndents, it is a bit of a hassle to merge ALL responses for each variable into
+#a single dataframe. Instead I have decided to keep it simple and compile data 
+#for each variable according to scenario groups.
+
+#imageability
+img_sg1 <- data.frame(bj$bj_on_img, bj$bj_off_img, 
+                      cd$cd_on_img, cd$cd_off_img,
+                      fn$fn_on_img, fn$fn_off_img,
+                      pf$pf_on_img, pf$pf_off_img
+                      )
+img_sg2 <- data.frame(ec$ec_on_img, ec$ec_off_img,
+                      ftp$ftp_on_img, ftp$ftp_off_img,
+                      av$av_on_img, av$av_off_img,
+                      ua$ua_on_img, ua$ua_off_img
+                      )
+img_sg3 <- data.frame(mj$mj_on_img, mj$mj_off_img,
+                      dd$dd_on_img, dd$dd_off_img,
+                      sc$sc_on_img, sc$sc_off_img,
+                      de$de_on_img, de$de_off_img
+)
+
+#emotional response
+er_sg1 <- data.frame(bj$bj_on_er, bj$bj_off_er, 
+                     cd$cd_on_er, cd$cd_off_er,
+                     fn$fn_on_er, fn$fn_off_er,
+                     pf$pf_on_er, pf$pf_off_er
+                     )
+er_sg2 <- data.frame(ec$ec_on_er, ec$ec_off_er,
+                     ftp$ftp_on_er, ftp$ftp_off_er,
+                     av$av_on_er, av$av_off_er,
+                     ua$ua_on_er, ua$ua_off_er
+                     )
+er_sg3 <- data.frame(mj$mj_on_er, mj$mj_off_er,
+                     dd$dd_on_er, dd$dd_off_er,
+                     sc$sc_on_er, sc$sc_off_er,
+                     de$de_on_er, de$de_off_er
+)
+
+#size of effect
+soe_sg1 <- data.frame(bj$bj_on_soe, bj$bj_off_soe, 
+                      cd$cd_on_soe, cd$cd_off_soe,
+                      fn$fn_on_soe, fn$fn_off_soe,
+                      pf$pf_on_soe, pf$pf_off_soe
+                      )
+soe_sg2 <- data.frame(ec$ec_on_soe, ec$ec_off_soe,
+                      ftp$ftp_on_soe, ftp$ftp_off_soe,
+                      av$av_on_soe, av$av_off_soe,
+                      ua$ua_on_soe, ua$ua_off_soe
+                      )
+soe_sg3 <- data.frame(mj$mj_on_soe, mj$mj_off_soe,
+                      dd$dd_on_soe, dd$dd_off_soe,
+                      sc$sc_on_soe, sc$sc_off_soe,
+                      de$de_on_soe, de$de_off_soe
+)
+
+#social harm
+sh_sg1 <- data.frame(bj$bj_on_sh, bj$bj_off_sh, 
+                     cd$cd_on_sh, cd$cd_off_sh,
+                     fn$fn_on_sh, fn$fn_off_sh,
+                     pf$pf_on_sh, pf$pf_off_sh
+                     )
+sh_sg2 <- data.frame(ec$ec_on_sh, ec$ec_off_sh,
+                     ftp$ftp_on_sh, ftp$ftp_off_sh,
+                     av$av_on_sh, av$av_off_sh,
+                     ua$ua_on_sh, ua$ua_off_sh
+                     )
+sh_sg3 <- data.frame(mj$mj_on_sh, mj$mj_off_sh,
+                     dd$dd_on_sh, dd$dd_off_sh,
+                     sc$sc_on_sh, sc$sc_off_sh,
+                     de$de_on_sh, de$de_off_sh
+)
+
+#moral wrongness
+mw_sg1 <- data.frame(bj$bj_on_mw, bj$bj_off_mw, 
+                     cd$cd_on_mw, cd$cd_off_mw,
+                     fn$fn_on_mw, fn$fn_off_mw,
+                     pf$pf_on_mw, pf$pf_off_mw
+                     )
+mw_sg2 <- data.frame(ec$ec_on_mw, ec$ec_off_mw,
+                     ftp$ftp_on_mw, ftp$ftp_off_mw,
+                     av$av_on_mw, av$av_off_mw,
+                     ua$ua_on_mw, ua$ua_off_mw
+                     )
+mw_sg3 <- data.frame(mj$mj_on_mw, mj$mj_off_mw,
+                     dd$dd_on_mw, dd$dd_off_mw,
+                     sc$sc_on_mw, sc$sc_off_mw,
+                     de$de_on_mw, de$de_off_mw
+)
+
+
+             #### End of data cleaning and sub-setting code ####
+
+```
+   
+    
+    ## creating network models using qgraph ##
+
+```{r}
+library(lavaan)
+library(bootnet)
+library(qgraph)
+library(igraph)
+
+
+#first need to create a list by which to group nodes in the network model
+#there are a few options here (using SG1 as an example)
+
+rm(sg1groups)
+
+#firstly, could groups nodes by on/off variant for each scenario:
+sg1groups <- list("bridge jumper online" = c(1:5),
+                  "bridge jumper offline" = c(6:10),
+                  "charity donation online" = c(11:15),
+                  "charity donation offline" = c(16:20),
+                  "fake news online" = c(21:25),
+                  "fake news offline" = c(26:30),
+                  "public fight online" = c(31:35),
+                  "public fight offline" = c(36:40))
+
+#OR could group nodes by scenarios (no on/off discrepancy)
+sg1groups <- list("bridge jumper" = c(1:10),               #think this is the best option so far           
+                  "charity donation" = c(11:20),
+                  "fake news" = c(21:30),
+                  "public fight" = c(31:40))
+
+#OR could group nodes by simply on/offline
+sg1groups <- list("online" = c(1:5,11:15,21:25,31:35),
+                  "offline" = c(6:10,16:20,26:30,36:40))
+
+
+
+#create labels to make the output more readable
+networklabels <- c("on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw")
+
+
+#by running one of the above three grouping options first, the following code
+#will produce the same network model, with different coloured nodes
+
+qgraph(cor(sg1),
+       groups = sg1groups,    #group nodes by scenario
+       layout = "spring",     #layout = "spring" allows for the creation of node clusters
+       sampleSize = 66,
+       graph = "cor",         #Using Pearson's correlation by default
+       minimum = "sig.level",  
+       sig.level = 0.001,     #only show correlations significant at the .001 level
+       bonf = T,              #run Bonferroni corrections
+       borders = FALSE,       #remove borders around nodes
+       vsize = 6,             #adjust size of nodes
+       labels = networklabels,#use abbreviated labels for nodes
+       details = TRUE
+       )
+
+
+?qgraph
+
+
+#create groups for SG2 & SG3
+sg2groups <- list("explicit content" = c(1:10),                        
+                  "f the police" = c(11:20),
+                  "anti-vax" = c(21:30),
+                  "unfounded accusation" = c(31:40))
+
+sg3groups <- list("mean joke" = c(1:10),                       
+                  "drug dealer" = c(11:20),
+                  "sexist comment" = c(21:30),
+                  "drunk ex" = c(31:40))
+
+
+#create network model for SG2
+qgraph(cor(sg2),
+       groups = sg2groups,    
+       layout = "spring",     
+       sampleSize = 68,
+       graph = "cor",         
+       minimum = "sig.level",  
+       sig.level = 0.001,
+       bonf = T,              
+       borders = FALSE,       
+       vsize = 6,             
+       labels = networklabels,
+       details = TRUE
+)
+
+
+
+#and sg3
+qgraph(cor(sg3),
+       groups = sg3groups,    
+       layout = "spring",     
+       sampleSize = 69,
+       graph = "cor",         
+       minimum = "sig.level",  
+       sig.level = 0.001,       
+       bonf = T,              
+       borders = FALSE,       
+       vsize = 6,             
+       labels = networklabels,
+       details = TRUE
+)
+```
+
+    ## creating and checking network models using igraph ##
+    #sg1
+```{r}
+
+library(RColorBrewer)
+library(scales)
+library(igraph)
+
+#initialise list of node labels
+#note these node labels are consistent across sg1, 2, and 3
+networklabels <- c("on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw")
+
+# Define the groupings of nodes
+sg1groups <- list("bridge jumper" = c(1:10),
+                  "charity donation" = c(11:20),
+                  "fake news" = c(21:30),
+                  "public fight" = c(31:40))
+
+
+#first create a correlation matrix for sg1
+corr_matrix <- cor(sg1)
+
+#then pull all the correlations which meet the >.05 threshold into a new matrix
+corr_thresholded <- corr_matrix > 0.5 
+adj_matrix <- as.matrix(corr_thresholded) # Convert to a matrix
+
+#create an igraph object based on this new matrix
+g <- igraph::graph_from_adjacency_matrix(adj_matrix, 
+                                         mode = "undirected",
+                                         weighted = T,
+                                         diag = FALSE)
+
+
+# Create a vector of colors based on group membership
+node_colors <- rep("black", length(V(g)))
+for (i in seq_along(sg1groups)) {
+  nodes_in_group <- sg1groups[[i]]
+  node_colors[nodes_in_group] <- brewer.pal(length(sg1groups), "Set1")[i]
+}
+
+
+#use networklabels list to relabel nodes
+igraph::V(g)$name <- networklabels[1:ncol(sg1)]
+
+# Use the layout_with_fr function to generate a layout for the graph
+layout <- igraph::layout_with_fr(g)
+
+#plot the network model
+plot(g, 
+     layout = layout_with_fr(g, maxiter = 500),
+     margin = .001,
+     vertex.color = node_colors,
+     vertex.label.color = "black", # change node label colour
+     vertex.size = 20, #                change size of nodes
+     vertex.label.cex = 1, #          change size of label text
+     edge.width = abs(corr_matrix)*10,
+     edge.color = "green"
+     )
+
+#note - despite much fiddling, I can't get the igraph model to look as good as
+#the qgraph plot. However, the actual data in the unplotted model should be the same
+#and it is considerably easier to check the structural properties of an igraph
+#rather than a qgraph object
+
+# Calculate a range of centrality indices
+degree(g)#      degree (no. of edges connected to each node)
+strength(g)#    strength (sum of the weights of edges connected to a node)
+closeness(g)#   closeness (how closely connected a node is with other nodes in the model)
+betweenness(g)# betweenness (how frequently a node appears in the shortest paths between other nodes)
+
+#check node clusters
+clusters(g)#    3 main clusters (1 = img, 2 = er, sh, & mw, 3 = soe)
+transitivity(g)
+
+#calculate the 'small-worldness' of the model
+# Calculate the clustering coefficient and average path length of the network
+cc <- transitivity(g, type = "global")
+apl <- average.path.length(g)
+
+print(cc)
+print(apl)
+
+# Generate a random network with the same number of nodes and edges
+rg <- sample_gnm(vcount(g), ecount(g))
+
+# Calculate the clustering coefficient and average path length of the random network
+rg_cc <- transitivity(rg, type = "global")
+rg_apl <- average.path.length(rg)
+
+# Calculate the small-worldness of the network
+sw <- (cc / rg_cc) / (apl / rg_apl)
+
+# Print the results
+cat("Clustering coefficient: ", cc, "\n")
+cat("Average path length: ", apl, "\n")
+cat("Random clustering coefficient: ", rg_cc, "\n")
+cat("Random average path length: ", rg_apl, "\n")
+cat("Small-worldness: ", sw, "\n")# small world index >3 = small-world clustering is occurring within the network
+
+
+#The small-world index is being calculated by generating a random network
+#this means a slightly smalled small world index is calculated each time
+#to solve this, use a for loop to calculate the small-worldness of the model 10,000 times
+#report the mean, standard dev and confidence intervals of this process for a more accurate small world index
+
+# Set the number of iterations you want to run
+num_iterations <- 10000
+
+# Initialise a vector to store the small-world index for each iteration
+sw_indices <- numeric(num_iterations)
+
+# Loop through the iterations
+#this loop might take a minute to run
+for (i in 1:num_iterations) {
+  cc <- transitivity(h, type = "global")
+  apl <- average.path.length(g)
+  rh <- sample_gnm(vcount(g), ecount(g))
+  rh_cc <- transitivity(rh, type = "global")
+  rh_apl <- average.path.length(rh)
+  sw_indices[i] <- (cc / rh_cc) / (apl / rh_apl)
+}
+
+# Calculate the mean and standard deviation of the small-world index across all iterations
+sw_mean <- mean(sw_indices)
+sw_sd <- sd(sw_indices)
+
+# Print the results
+cat("Mean small-world index: ", sw_mean, "\n") #bootstrapped small-world index and standard dev
+cat("Standard deviation of small-world index: ", sw_sd, "\n")
+
+```
+
+    #sg2
+```{r}
+
+library(RColorBrewer)
+library(scales)
+library(igraph)
+
+#initialise list of node labels
+#note these node labels are consistent across sg1, 2, and 3
+networklabels <- c("on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw")
+
+# Define the groupings of nodes (sg2)
+sg2groups <- list("explicit content" = c(1:10),                        
+                  "f the police" = c(11:20),
+                  "anti-vax" = c(21:30),
+                  "unfounded accusation" = c(31:40))
+
+
+#first create a correlation matrix for sg1
+corr_matrix <- cor(sg2)
+
+#then pull all the correlations which meet the >.05 threshold into a new matrix
+corr_thresholded <- corr_matrix > 0.5 
+adj_matrix <- as.matrix(corr_thresholded) # Convert to a matrix
+
+#create an igraph object based on this new matrix
+h <- igraph::graph_from_adjacency_matrix(adj_matrix, 
+                                         mode = "undirected",
+                                         weighted = T,
+                                         diag = FALSE)
+
+
+# Create a vector of colors based on group membership
+node_colors <- rep("black", length(V(h)))
+for (i in seq_along(sg2groups)) {
+  nodes_in_group <- sg2groups[[i]]
+  node_colors[nodes_in_group] <- brewer.pal(length(sg2groups), "Set1")[i]
+}
+
+
+#use networklabels list to relabel nodes
+igraph::V(h)$name <- networklabels[1:ncol(sg2)]
+
+# Use the layout_with_fr function to generate a layout for the graph
+layout <- igraph::layout_with_fr(h)
+
+#plot the network model
+plot(h, 
+     layout = layout_with_fr(h, maxiter = 500),
+     margin = .001,
+     vertex.color = node_colors,
+     vertex.label.color = "black", # change node label colour
+     vertex.size = 20, #                change size of nodes
+     vertex.label.cex = 1, #          change size of label text
+     edge.width = abs(corr_matrix)*10,
+     edge.color = "green"
+     )
+
+#note - despite much fiddling, I can't get the igraph model to look as good as
+#the qgraph plot. However, the actual data in the unplotted model should be the same
+#and it is considerably easier to check the structural properties of an igraph
+#rather than a qgraph object
+
+# Calculate a range of centrality indices
+degree(h)#      degree (no. of edges connected to each node)
+strength(h)#    strength (sum of the weights of edges connected to a node)
+closeness(h)#   closeness (how closely connected a node is with other nodes in the model)
+betweenness(h)# betweenness (how frequently a node appears in the shortest paths between other nodes)
+
+#check node clusters
+clusters(h)#    3 main clusters (1 = img, 2 = er, sh, & mw, 3 = soe)
+transitivity(h)
+
+#calculate the 'small-worldness' of the model
+# Calculate the clustering coefficient and average path length of the network
+cc <- transitivity(h, type = "global")
+apl <- average.path.length(h)
+
+print(cc)
+print(apl)
+
+# Generate a random network with the same number of nodes and edges
+rh <- sample_gnm(vcount(h), ecount(h))
+
+# Calculate the clustering coefficient and average path length of the random network
+rh_cc <- transitivity(rh, type = "global")
+rh_apl <- average.path.length(rh)
+
+# Calculate the small-worldness of the network
+sw <- (cc / rh_cc) / (apl / rh_apl)
+
+# Print the results
+cat("Clustering coefficient: ", cc, "\n")
+cat("Average path length: ", apl, "\n")
+cat("Random clustering coefficient: ", rh_cc, "\n")
+cat("Random average path length: ", rh_apl, "\n")
+cat("Small-worldness: ", sw, "\n")# small world index 2.9 = borderline small-world clustering
+
+
+#I the small-world index is being calculated by generating a random network
+#this means a slightly smalled small world index is calculated each time
+#to solve this, use a for loop to calculate the small-worldness of the model 10,000 times
+#report the mean, standard dev and confidence intervals of this process for a more accurate small world index
+
+# Set the number of iterations you want to run
+num_iterations <- 10000
+
+# Initialise a vector to store the small-world index for each iteration
+sw_indices <- numeric(num_iterations)
+
+# Loop through the iterations
+#this loop might take a minute to run
+for (i in 1:num_iterations) {
+  cc <- transitivity(h, type = "global")
+  apl <- average.path.length(h)
+  rh <- sample_gnm(vcount(h), ecount(h))
+  rh_cc <- transitivity(rh, type = "global")
+  rh_apl <- average.path.length(rh)
+  sw_indices[i] <- (cc / rh_cc) / (apl / rh_apl)
+}
+
+# Calculate the mean and standard deviation of the small-world index across all iterations
+sw_mean <- mean(sw_indices)
+sw_sd <- sd(sw_indices)
+
+# Print the results
+cat("Mean small-world index: ", sw_mean, "\n") #bootstrapped small-world index and standard dev
+cat("Standard deviation of small-world index: ", sw_sd, "\n")
+
+
+```
+
+    #sg3
+```{r}
+library(RColorBrewer)
+library(scales)
+library(igraph)
+
+#initialise list of node labels
+#note these node labels are consistent across sg1, 2, and 3
+networklabels <- c("on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw",
+                   "on img", "on er", "on soe", "on sh", "on mw",
+                   "off img", "off er", "off soe", "off sh", "off mw")
+
+# Define the groupings of nodes (sg2)
+sg3groups <- list("mean joke" = c(1:10),                       
+                  "drug dealer" = c(11:20),
+                  "sexist comment" = c(21:30),
+                  "drunk ex" = c(31:40))
+
+
+#first create a correlation matrix for sg1
+corr_matrix <- cor(sg3)
+
+#then pull all the correlations which meet the >.05 threshold into a new matrix
+corr_thresholded <- corr_matrix > 0.5 
+adj_matrix <- as.matrix(corr_thresholded) # Convert to a matrix
+
+#create an igraph object based on this new matrix
+j <- igraph::graph_from_adjacency_matrix(adj_matrix, 
+                                         mode = "undirected",
+                                         weighted = T,
+                                         diag = FALSE)
+
+
+# Create a vector of colors based on group membership
+node_colors <- rep("black", length(V(j)))
+for (i in seq_along(sg3groups)) {
+  nodes_in_group <- sg3groups[[i]]
+  node_colors[nodes_in_group] <- brewer.pal(length(sg3groups), "Set1")[i]
+}
+
+
+#use networklabels list to relabel nodes
+igraph::V(j)$name <- networklabels[1:ncol(sg3)]
+
+# Use the layout_with_fr function to generate a layout for the graph
+layout <- igraph::layout_with_fr(j)
+
+#plot the network model
+plot(j, 
+     layout = layout_with_fr(j, maxiter = 500),
+     margin = .001,
+     vertex.color = node_colors,
+     vertex.label.color = "black", # change node label colour
+     vertex.size = 20, #                change size of nodes
+     vertex.label.cex = 1, #          change size of label text
+     edge.width = abs(corr_matrix)*10,
+     edge.color = "green"
+     )
+
+#note - despite much fiddling, I can't get the igraph model to look as good as
+#the qgraph plot. However, the actual data in the unplotted model should be the same
+#and it is considerably easier to check the structural properties of an igraph
+#rather than a qgraph object
+
+# Calculate a range of centrality indices
+degree(j)#      degree (no. of edges connected to each node)
+strength(j)#    strength (sum of the weights of edges connected to a node)
+closeness(j)#   closeness (how closely connected a node is with other nodes in the model)
+betweenness(j)# betweenness (how frequently a node appears in the shortest paths between other nodes)
+
+#check node clusters
+clusters(j)#    3 main clusters (1 = img, 2 = er, sh, & mw, 3 = soe)
+transitivity(j)
+
+#calculate the 'small-worldness' of the model
+# Calculate the clustering coefficient and average path length of the network
+cc <- transitivity(j, type = "global")
+apl <- average.path.length(j)
+
+print(cc)
+print(apl)
+
+# Generate a random network with the same number of nodes and edges
+rj <- sample_gnm(vcount(j), ecount(j))
+
+# Calculate the clustering coefficient and average path length of the random network
+rj_cc <- transitivity(rj, type = "global")
+rj_apl <- average.path.length(rj)
+
+# Calculate the small-worldness of the network
+sw <- (cc / rj_cc) / (apl / rj_apl)
+
+# Print the results
+cat("Clustering coefficient: ", cc, "\n")
+cat("Average path length: ", apl, "\n")
+cat("Random clustering coefficient: ", rj_cc, "\n")
+cat("Random average path length: ", rj_apl, "\n")
+cat("Small-worldness: ", sw, "\n")# small world index >3 = high small-worldness in the model
+
+
+#I the small-world index is being calculated by generating a random network
+#this means a slightly smalled small world index is calculated each time
+#to solve this, use a for loop to calculate the small-worldness of the model 10,000 times
+#report the mean, standard dev and confidence intervals of this process for a more accurate small world index
+
+# Set the number of iterations you want to run
+num_iterations <- 10000
+
+# Initialise a vector to store the small-world index for each iteration
+sw_indices <- numeric(num_iterations)
+
+# Loop through the iterations
+#this loop might take a minute to run
+for (i in 1:num_iterations) {
+  cc <- transitivity(j, type = "global")
+  apl <- average.path.length(j)
+  rh <- sample_gnm(vcount(j), ecount(j))
+  rh_cc <- transitivity(rh, type = "global")
+  rh_apl <- average.path.length(rh)
+  sw_indices[i] <- (cc / rh_cc) / (apl / rh_apl)
+}
+
+# Calculate the mean and standard deviation of the small-world index across all iterations
+sw_mean <- mean(sw_indices)
+sw_sd <- sd(sw_indices)
+
+# Print the results
+cat("Mean small-world index: ", sw_mean, "\n") #bootstrapped small-world index and standard dev
+cat("Standard deviation of small-world index: ", sw_sd, "\n")
+```
