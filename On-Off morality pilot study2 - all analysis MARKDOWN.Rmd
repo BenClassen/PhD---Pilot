@@ -1,0 +1,2397 @@
+---
+title: "On-Off morality pilot study2 - all analysis MARKDOWN"
+output: html_document
+date: "2023-04-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+                ## Online/Offline Morality Pilot Study ##
+                    ##Ben C first script##
+
+             #### Importing, cleaning, and sub-setting data ####
+           #Run this first section of code before all other analyses#
+```{r}
+library(tidyverse)
+library(qualtRics)
+library(lsr)
+library(psych)
+library(car)
+library(dplyr)
+library(ggpubr)
+library(corrplot)
+library(Hmisc)
+library(knitr)
+library(openxlsx)
+library(tidyr)
+library(graphics)
+library(effsize)
+
+#Import Raw data
+raw <- read_survey("Pilot study - RAW2.csv")
+
+#Remove post-survey dummy participants
+df <- raw[-c(203, 204, 206, 207, 208),]
+rm(raw)
+
+#Relabel gender values
+df$gender <- as.factor(df$gender)
+levels(df$gender) <- c("female", "male", "another gender")
+
+#Relabel ethnicity values
+df$ethnicity <- as.factor(df$ethnicity)
+levels(df$ethnicity) <- c("African", "Asian", "Black or African American",
+                          "European", "Hispanic or Latino", "Middle Eastern", 
+                          "Non-Hispanic White", "Two or more races", 
+                          "Other ethnicity")
+
+#erroneous response of '14' to a 7 point measure of CD Off ER
+#human error with coding responses in qualtrics
+#replace scores of 14 with a value of 7 in cd off er column
+df["cd_off_er"][df["cd_off_er"] == 14] <- 7
+
+
+#Don't use scientific notation
+options(scipen = 999)
+
+
+
+
+
+
+
+
+        #Dealing with outliers#
+        
+#Almost all of the size of effect Q's have statistical outliers e.g.:
+boxplot.stats(df$bj_on_soe)                     #highest value 300mill
+
+#Therefore need to identify outliers and trim them
+
+#First create a function which trims down the top 95th percentile of responses
+#Because the outliers to size of effect questions are still valid, trimming
+#rather than excluding them is best option
+
+#First, create a new function
+
+fun <- function(x){  
+        quantiles <- quantile( x, c(.00, .95), na.rm = TRUE)
+        x[ x < quantiles[1] ] <- quantiles[1]
+        x[ x > quantiles[2] ] <- quantiles[2]
+        x
+}       #create function [fun()] which trims down the top 5% of responses
+
+df$bj_on_soe <- fun( df$bj_on_soe ) 
+        #apply the new function to a given size of effect variable
+df$bj_on_soe
+        #check variable was trimmed correctly
+
+#Identify outliers in size of effect variables and apply new function to them
+#Only trimming if the outlier is >3 times times bigger than the next 
+#largest response to the question.
+#Also, if the online variant is trimmed, trim the offline variant as well
+#(and vice versa)
+
+
+boxplot.stats(df$bj_off_soe)                    #2000 (next largest value is 100)
+df$bj_off_soe <- fun(df$bj_off_soe)             #apply trim function
+boxplot(df$bj_off_soe)                          #make boxplot of newly trimmed variable
+
+
+boxplot.stats(df$cd_on_soe)                     #1000 (next largest 250)
+df$cd_on_soe <- fun(df$cd_on_soe)
+boxplot(df$cd_on_soe)
+
+boxplot.stats(df$cd_off_soe)                    #150 (next largest 50)
+df$cd_off_soe <- fun(df$cd_off_soe)
+boxplot(df$cd_off_soe)                          #outlier isn't that big here, 
+                                #but the online version was trimmed, so
+                                #trimming both to keep on/off responses consistent   
+
+
+boxplot.stats(df$fn_on_soe)                     #300mill (next largest 1000)
+df$fn_on_soe <- fun(df$fn_on_soe)
+boxplot(df$fn_on_soe)
+
+boxplot.stats(df$fn_off_soe)                    #300mill (next largest 10000)
+df$fn_off_soe <- fun(df$fn_off_soe)
+boxplot(df$fn_off_soe)
+
+
+boxplot.stats(df$pf_on_soe)                     #1000 x2 (next largest 100)
+df$pf_on_soe <- fun(df$pf_on_soe)
+boxplot(df$pf_on_soe)
+
+boxplot.stats(df$pf_off_soe)                    #100 (next largest 30)
+df$pf_off_soe <- fun(df$pf_off_soe)
+boxplot(df$pf_off_soe)                          #no trim needed, but on was trimmed
+
+
+boxplot.stats(df$ec_on_soe)                     #1 bil (next largest 1000 x4)
+df$ec_on_soe <- fun(df$ec_on_soe)
+boxplot(df$ec_on_soe)
+
+boxplot.stats(df$ec_off_soe)                    #1 bil (next largest 2145)              
+df$ec_off_soe <- fun(df$ec_off_soe)
+boxplot(df$ec_off_soe)
+
+
+boxplot.stats(df$ftp_on_soe)                    #350 mil (next largest 1000 x3)
+df$ftp_on_soe <- fun(df$ftp_on_soe)
+boxplot(df$ftp_on_soe)
+
+boxplot.stats(df$ftp_off_soe)                   #350 mil (next 200)
+df$ftp_off_soe <- fun(df$ftp_off_soe)
+boxplot(df$ftp_off_soe)
+
+
+boxplot.stats(df$av_on_soe)                     #10mil (next largest 1978)        #note the discrepancy between largest soe for on/off anti-vax
+df$av_on_soe <- fun(df$av_on_soe)
+boxplot(df$av_on_soe)
+
+boxplot.stats(df$av_off_soe)                    #100 x 3 (next largest 25)
+df$av_off_soe <- fun(df$av_off_soe)
+boxplot(df$av_off_soe)
+
+
+boxplot.stats(df$ua_on_soe)                     #675 (next largest 500)
+                                                #no trim needed
+
+boxplot.stats(df$ua_off_soe)                    #942
+                                                #no trim needed
+
+boxplot.stats(df$mj_on_soe)                     #no no trim needed
+
+boxplot.stats(df$mj_off_soe)                    #no trim needed
+
+
+boxplot.stats(df$dd_on_soe)                     #no trim needed
+                                                
+boxplot.stats(df$dd_off_soe)                    #no trim needed
+
+
+boxplot.stats(df$sc_on_soe)                     #1000 (next largest 100 x 2)
+df$sc_on_soe <- fun(df$sc_on_soe)
+boxplot(df$sc_on_soe)
+
+boxplot.stats(df$sc_off_soe)                    #1000 (next largest 50)
+df$sc_off_soe <- fun(df$sc_off_soe)
+boxplot(df$sc_off_soe)
+
+
+boxplot.stats(df$de_on_soe)                     #1000 (next largest 58)
+df$de_on_soe <- fun(df$de_on_soe)
+boxplot(df$de_on_soe)
+
+boxplot.stats(df$de_off_soe)                    #no trim needed, but on was trimmed
+df$de_off_soe <- fun(df$de_off_soe)
+boxplot(df$de_off_soe)
+
+
+
+             ## Breaking down raw data into smaller components ##
+
+#create subset study conditions for each of the 3 scenario groups (sg1-sg3)
+
+sg1 <- subset(x = df,                     #create scen group 1 from df
+              
+              subset = bj_on_img > 0,     #find respondents who responded >0 to 
+                                          #first Q in this condition
+              
+              select = c(23:62))          #include all completed scale variables
+                                          #in the new scenario data frame
+sg2 <- subset(x = df,
+              subset = ec_on_img > 0,
+              select = c(63:102))
+
+sg3 <- subset(x = df,
+              subset = mj_on_img > 0,
+              select = c(103:142))
+
+#create subset groups for each pair of online/offline scenarios
+
+#scenario group 1
+
+bj <- subset(x = sg1,                    #bridge jumper
+             select = c(1:10))
+cd <- subset(x = sg1,                    #charity donation
+             select = c(11:20))
+fn <- subset(x = sg1,                    #fake news
+             select = c(21:30))
+pf <- subset(x = sg1,                    #public fight
+             select = c(31:40))
+
+#scenario  group 2
+
+ec <- subset(x = sg2,                    #explicit content
+             select = c(1:10))
+ftp <- subset(x = sg2,                   #f the police
+             select = c(11:20))
+av <- subset(x = sg2,                    #anti-vax
+             select = c(21:30))
+ua <- subset(x = sg2,                    #unfounded accusation
+             select = c(31:40))
+
+#scenario group 3
+
+mj <- subset(x = sg3,                    #mean joke
+             select = c(1:10))
+dd <- subset(x = sg3,                    #drug dealer
+             select = c(11:20))
+sc <- subset(x = sg3,                    #sexist comment
+             select = c(21:30))
+de <- subset(x = sg3,                    #drunk ex
+             select = c(31:40))
+        
+        
+#create subset groups for each of the on/off scenario variants
+
+#scenario group 1
+
+bj_on <- subset(x = sg1,                  #bridge jumper online
+             select = c(1:5))
+bj_off <- subset(x = sg1,                 #bridge jumper offline
+                 select = c(6:10))
+
+cd_on <- subset(x = sg1,                  #charity donation online
+                select = (11:15))
+cd_off <- subset(x = sg1,                 #charity donation offline
+                 select = c(16:20))
+
+fn_on <- subset(x = sg1,                  #fake news online
+                select = (21:25))
+fn_off <- subset(x = sg1,                 #fake news offline
+                select = (26:30))
+
+pf_on <- subset(x = sg1,                  #public fight online
+                select = (31:35))
+pf_off <- subset(x = sg1,                 #public fight offline
+                select = (36:40))
+
+#scenario group 2 
+
+ec_on <- subset(x = sg2,
+                select = (1:5))           #explicit content online
+ec_off <- subset(x = sg2,
+                select = (6:10))          #explicit content offline
+
+ftp_on <- subset(x = sg2,
+                select = (11:15))         #fuck the police online
+ftp_off <- subset(x = sg2,
+                select = (16:20))         #fuck the police offline
+
+av_on <- subset(x = sg2,
+                select = (21:25))         #anti-vax online
+av_off <- subset(x = sg2,
+                select = (26:30))         #anti-vax offline
+
+ua_on <- subset(x = sg2,
+                select = (31:35))         #unfounded accusation online
+ua_off <- subset(x = sg2,
+                select = (36:40))         #unfound accusation offline
+
+#scenario group 3
+
+mj_on <- subset(x = sg3,
+                select = (1:5))           #mean joke online
+mj_off <- subset(x = sg3,
+                select = (6:10))          #mean joke offline
+
+dd_on <- subset(x = sg3,
+                select = (11:15))         #drug dealer online
+dd_off <- subset(x = sg3,
+                select = (16:20))         #drug dealer offline
+
+sc_on <- subset(x = sg3,
+                select = (21:25))         #sexist comment online
+sc_off <- subset(x = sg3,
+                select = (26:30))         #sexist comment offline
+
+de_on <- subset(x = sg3,
+                select = (31:35))         #drunk ex online
+de_off <- subset(x = sg3,
+                select = (36:40))         #drunk ex offline
+
+#creating groups for each individual variable
+
+#note that because each scenario group has slightly different numbers of
+#resopndents, it is a hassle to merge ALL responses for each variable into
+#a single dataframe. Instead I have decided to keep it simple and compile data 
+#for each variable according to scenario groups.
+
+#imageability
+img_sg1 <- data.frame(bj$bj_on_img, bj$bj_off_img, 
+                      cd$cd_on_img, cd$cd_off_img,
+                      fn$fn_on_img, fn$fn_off_img,
+                      pf$pf_on_img, pf$pf_off_img
+                      )
+img_sg2 <- data.frame(ec$ec_on_img, ec$ec_off_img,
+                      ftp$ftp_on_img, ftp$ftp_off_img,
+                      av$av_on_img, av$av_off_img,
+                      ua$ua_on_img, ua$ua_off_img
+                      )
+img_sg3 <- data.frame(mj$mj_on_img, mj$mj_off_img,
+                      dd$dd_on_img, dd$dd_off_img,
+                      sc$sc_on_img, sc$sc_off_img,
+                      de$de_on_img, de$de_off_img
+)
+
+#emotional response
+er_sg1 <- data.frame(bj$bj_on_er, bj$bj_off_er, 
+                     cd$cd_on_er, cd$cd_off_er,
+                     fn$fn_on_er, fn$fn_off_er,
+                     pf$pf_on_er, pf$pf_off_er
+                     )
+er_sg2 <- data.frame(ec$ec_on_er, ec$ec_off_er,
+                     ftp$ftp_on_er, ftp$ftp_off_er,
+                     av$av_on_er, av$av_off_er,
+                     ua$ua_on_er, ua$ua_off_er
+                     )
+er_sg3 <- data.frame(mj$mj_on_er, mj$mj_off_er,
+                     dd$dd_on_er, dd$dd_off_er,
+                     sc$sc_on_er, sc$sc_off_er,
+                     de$de_on_er, de$de_off_er
+)
+
+#size of effect
+soe_sg1 <- data.frame(bj$bj_on_soe, bj$bj_off_soe, 
+                      cd$cd_on_soe, cd$cd_off_soe,
+                      fn$fn_on_soe, fn$fn_off_soe,
+                      pf$pf_on_soe, pf$pf_off_soe
+                      )
+soe_sg2 <- data.frame(ec$ec_on_soe, ec$ec_off_soe,
+                      ftp$ftp_on_soe, ftp$ftp_off_soe,
+                      av$av_on_soe, av$av_off_soe,
+                      ua$ua_on_soe, ua$ua_off_soe
+                      )
+soe_sg3 <- data.frame(mj$mj_on_soe, mj$mj_off_soe,
+                      dd$dd_on_soe, dd$dd_off_soe,
+                      sc$sc_on_soe, sc$sc_off_soe,
+                      de$de_on_soe, de$de_off_soe
+)
+
+#social harm
+sh_sg1 <- data.frame(bj$bj_on_sh, bj$bj_off_sh, 
+                     cd$cd_on_sh, cd$cd_off_sh,
+                     fn$fn_on_sh, fn$fn_off_sh,
+                     pf$pf_on_sh, pf$pf_off_sh
+                     )
+sh_sg2 <- data.frame(ec$ec_on_sh, ec$ec_off_sh,
+                     ftp$ftp_on_sh, ftp$ftp_off_sh,
+                     av$av_on_sh, av$av_off_sh,
+                     ua$ua_on_sh, ua$ua_off_sh
+                     )
+sh_sg3 <- data.frame(mj$mj_on_sh, mj$mj_off_sh,
+                     dd$dd_on_sh, dd$dd_off_sh,
+                     sc$sc_on_sh, sc$sc_off_sh,
+                     de$de_on_sh, de$de_off_sh
+)
+
+#moral wrongness
+mw_sg1 <- data.frame(bj$bj_on_mw, bj$bj_off_mw, 
+                     cd$cd_on_mw, cd$cd_off_mw,
+                     fn$fn_on_mw, fn$fn_off_mw,
+                     pf$pf_on_mw, pf$pf_off_mw
+                     )
+mw_sg2 <- data.frame(ec$ec_on_mw, ec$ec_off_mw,
+                     ftp$ftp_on_mw, ftp$ftp_off_mw,
+                     av$av_on_mw, av$av_off_mw,
+                     ua$ua_on_mw, ua$ua_off_mw
+                     )
+mw_sg3 <- data.frame(mj$mj_on_mw, mj$mj_off_mw,
+                     dd$dd_on_mw, dd$dd_off_mw,
+                     sc$sc_on_mw, sc$sc_off_mw,
+                     de$de_on_mw, de$de_off_mw
+)
+
+
+             #### End of data cleaning and sub-setting code ####
+
+```
+
+
+                ##Checking descriptive statistics##
+```{r}
+#Generate a selection of descriptive statistics for demographic variables
+summary(df$gender)
+summary(df$fb_use)
+summary(df$ethnicity)
+describe(df$age)
+table(df$age)
+describe(df$fb_use)
+table(df$fb_use)
+
+#create a frequency table for demographic variables which can be exported as a .csv
+
+# Convert age variable to a factor and group into categories
+age_cat <- cut(df$age, breaks = seq(20, 80, by = 10), 
+               labels = c("21-30", "31-40", "41-50", "51-60", "61-70", "71-72"))
+
+# Calculate frequencies for each demographic category
+gender_freq <- table(df$gender)
+age_freq <- table(age_cat)
+ethnicity_freq <- table(df$ethnicity)
+fb_use_freq <- table(df$fb_use)
+
+# Combine frequency tables into one data frame
+demo_freq <- data.frame(
+  Demographic = c(rep("Gender", length(gender_freq)), rep("Age", length(age_freq)),
+                  rep("Ethnicity", length(ethnicity_freq)), rep("fb_use", length(fb_use_freq))),
+  Category = c(names(gender_freq), names(age_freq), names(ethnicity_freq), sort(unique(df$fb_use))),
+  Frequency = c(gender_freq, age_freq, ethnicity_freq, fb_use_freq)
+)
+
+# Calculate percentage for each demographic category
+demo_freq$Percentage <- ifelse(demo_freq$Demographic == "Age",
+                               prop.table(demo_freq$Frequency[which(demo_freq$Demographic == "Age")]) * 100,
+                               prop.table(demo_freq$Frequency) * 100)
+
+# Round percentage to two decimal places
+demo_freq$Percentage <- round(demo_freq$Percentage, 2)
+
+#export this rough frequency table as an excel workbook
+write.xlsx(demo_freq, file = "demo_freq.xlsx", sheetName = "Frequency Table")
+
+#note - the freq table generated above is quite rough and will be tidied up
+#in excel before being included in thesis
+
+
+
+#Generate a selection of descriptive graphics for demographic variables
+
+#histogram for age
+hist(df$age,                         #variable I want to plot
+     main = "Age of Participants",   #title of histogram
+     xlab = "Age",                   #x-label
+     ylab = "No. of Participants",   #y-label
+     labels = TRUE,                  #show numbers of participants for each bin
+     xaxp = c(20, 75, 11)            #show x-axis tick marks at intervals of 5
+)
+
+#histogram for FB use
+hist(df$fb_use,                         
+     main = "Participant Facebook Use",
+     xlab = "Time spent on Facebook",
+     ylab = "No. of Participants",
+     xlim = c(1, 7),
+     ylim = c(0, 100),
+     breaks = 1:7,
+     labels = TRUE
+)
+
+
+#histogram for Gender
+plot(df$gender,                         
+     main = "Gender",
+     ylim = c(0, 120),
+)
+
+#histogram for Ethnicity
+plot(df$ethnicity,                         
+     main = "Participant Ethnicity",
+     ylab = "No. of Participants",
+     xlab = "Ethnicity",
+     ylim = c(0,150),
+     xlim = c(0,9),
+     las = 2,
+)
+
+
+#generate a ggplot for fb use variable to be included in thesis
+library(ggplot2)
+
+
+ggplot(df, aes(x = fb_use)) + 
+  geom_histogram(aes(y = ..density.., fill = factor(..x..)), alpha = 0.8, 
+                 binwidth = 0.5, show.legend = FALSE) + 
+  scale_fill_viridis_d() + 
+  theme_minimal() +
+  labs(title = "Study 1 Participant Facebook Use", 
+       x = "How much time do you feel you spend on Facebook?", 
+       y = "Percentage of participants") +
+   scale_x_continuous(breaks = seq(1, 7, 1), 
+                     limits = c(1, 7.5),
+                     labels = c("1 - Never", seq(2, 6, 1), "7 - Everyday")) +
+  scale_y_continuous(breaks = seq(0, 203, 0.5), 
+                     limits = c(0, 1), 
+                     expand = c(0, 0),
+                     labels = scales::percent_format(accuracy = 1)) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+                ## Exploring each individual variable ##
+                  #imageability
+```{r}
+#imageability summary
+summary(img_sg1)
+summary(img_sg2)
+summary(img_sg3)
+
+#imageability standard devs
+sapply(img_sg1, sd)
+sapply(img_sg2, sd)
+sapply(img_sg3, sd)
+
+#Calculate mean imageability for each scenario
+img_sg1_means <- data.frame(colMeans(img_sg1))
+img_sg2_means <- data.frame(colMeans(img_sg2))
+img_sg3_means <- data.frame(colMeans(img_sg3))
+
+
+#Check correlation of on/off imageability for each scenario
+img_sg1_cor_p <- rcorr(as.matrix(img_sg1))
+img_sg2_cor_p <- rcorr(as.matrix(img_sg2))
+img_sg3_cor_p <- rcorr(as.matrix(img_sg3))
+
+#output all correlation coefficients (r)
+img_sg1_cor_p$r
+img_sg2_cor_p$r
+img_sg3_cor_p$r
+#output all p values (p)
+img_sg1_cor_p$P
+img_sg2_cor_p$P
+img_sg3_cor_p$P
+
+
+#Create tables
+corrplot(img_sg1_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #create a correlation table for SG1 - Imageability
+         p.mat = img_sg1_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+corrplot(img_sg2_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #SG2 - Imageability
+         p.mat = img_sg2_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+corrplot(img_sg3_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #SG3 - Imageability
+         p.mat = img_sg3_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+
+
+###experimenting with creating plots comparing distributions
+library(ggplot2)
+library(tidyr)
+
+#going to be feeding DV data from each scenario group into ggplot so need to
+# convert img_sg1 data into long format
+data_long <- gather(img_sg1, key = "variable", value = "value") 
+
+#horizontal violins
+ggplot(data_long, aes(x = variable, y = value, fill = variable)) + 
+  geom_violin() + 
+  scale_fill_brewer(palette = "Set2") +
+  ggtitle("Descriptive Measures of Central Tendency") + 
+  xlab("Variables") + 
+  ylab("Value") +
+  coord_flip()
+
+#horizontal box_plots
+ggplot(data_long, aes(x = variable, y = value, fill = variable)) +
+  geom_boxplot(width=0.5, position=position_dodge(0.8)) +
+  scale_fill_brewer(palette = "Set2") +
+  ggtitle("Descriptive Measures of Central Tendency") +
+  xlab("Variables") +
+  ylab("Value") +
+  coord_flip() +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        legend.position="none")
+
+# Collection of density plots
+ggplot(data_long, aes(x = value, fill = variable)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ variable, scales = "free") +
+  theme_bw() +
+  ggtitle("Density Plot of img_sg1") +
+  xlab("Value") +
+  ylab("Density")
+
+## interesting, but struggling to get pairs of variables 
+##(e.g. pf_on_img & pf_off_img) to overlay nicely
+
+#4/4/23
+#have alot of data to present and thesis deadline looming..
+#perhaps I should just present it all in a single table for now. I can then come
+#back and work out some nicer visualisations later if I have time
+
+#creating pilot imageability mega table containing on/off means, SD's, on/off 
+#discreps, correlation coefficients and Wilcox test results for all pilot vignettes
+
+# calculate means and standard deviations for each dataframe
+means_sg1 <- colMeans(img_sg1)
+stds_sg1 <- apply(img_sg1, 2, sd)
+means_sg2 <- colMeans(img_sg2)
+stds_sg2 <- apply(img_sg2, 2, sd)
+means_sg3 <- colMeans(img_sg3)
+stds_sg3 <- apply(img_sg3, 2, sd)
+
+p_means <- c(means_sg1,means_sg2,means_sg3)
+p_stds <- c(stds_sg1,stds_sg2,stds_sg3)
+
+p_img <- data.frame(p_means,p_stds)
+
+
+
+
+
+```
+
+                  #emotional response
+```{r}
+#emotional response
+summary(er_sg1) 
+summary(er_sg2)
+summary(er_sg3)
+
+#emotional repsonse standard devs
+sapply(er_sg1, sd)
+sapply(er_sg2, sd)
+sapply(er_sg3, sd)
+
+#Calculate mean Emotional Response for each scenario
+er_sg1_means <- data.frame(colMeans(er_sg1))
+er_sg2_means <- data.frame(colMeans(er_sg2))
+er_sg3_means <- data.frame(colMeans(er_sg3))
+
+#Check correlation of on/off Emotional Response for each scenario
+er_sg1_cor_p <- rcorr(as.matrix(er_sg1))
+er_sg2_cor_p <- rcorr(as.matrix(er_sg2))
+er_sg3_cor_p <- rcorr(as.matrix(er_sg3))
+
+#output all correlation coefficients (r)
+er_sg1_cor_p$r
+er_sg2_cor_p$r
+er_sg3_cor_p$r
+#output all p values (p)
+er_sg1_cor_p$P
+er_sg2_cor_p$P
+er_sg3_cor_p$P
+
+#Create tables
+corrplot(er_sg1_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #create a correlation table for SG1 - Emotional Response
+         p.mat = er_sg1_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+corrplot(er_sg2_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #SG2 - Emotional Response (Note correlogram variables are being ordered alphatbetically)
+         p.mat = er_sg2_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+corrplot(er_sg3_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #SG3 - Emotional Response
+         p.mat = er_sg3_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+
+```
+
+                  #size of effect
+```{r}
+#size of effect
+summary(soe_sg1) 
+summary(soe_sg2)
+summary(soe_sg3)
+
+#size of effect standard devs
+sapply(soe_sg1, sd)
+sapply(soe_sg2, sd)
+sapply(soe_sg3, sd)
+
+#Calculate mean Size of Effect for each scenario
+soe_sg1_means <- data.frame(colMeans(soe_sg1))
+soe_sg2_means <- data.frame(colMeans(soe_sg2))
+soe_sg3_means <- data.frame(colMeans(soe_sg3))
+
+#output all correlation coefficients (r)
+soe_sg1_cor_p$r
+soe_sg2_cor_p$r
+soe_sg3_cor_p$r
+#output all p values (p)
+soe_sg1_cor_p$P
+soe_sg2_cor_p$P
+soe_sg3_cor_p$P
+
+
+#Check correlation of on/off Size of Effect for each scenario
+soe_sg1_cor_p <- rcorr(as.matrix(soe_sg1))
+soe_sg2_cor_p <- rcorr(as.matrix(soe_sg2))
+soe_sg3_cor_p <- rcorr(as.matrix(soe_sg3))
+
+#Create tables
+corrplot(soe_sg1_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #create a correlation table for SG1 - Size of Effect
+         p.mat = soe_sg1_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+corrplot(soe_sg2_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #SG2 - Size of Effect (Note correlogram variables are being ordered alphabetically)
+         p.mat = soe_sg2_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+corrplot(soe_sg3_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #SG3 - Size of Effect
+         p.mat = soe_sg3_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+```
+
+                  #social harm
+```{r}
+#social harm
+summary(sh_sg1) 
+summary(sh_sg2)
+summary(sh_sg3)
+
+#social harm standard devs
+sapply(sh_sg1, sd)
+sapply(sh_sg2, sd)
+sapply(sh_sg3, sd)
+
+#Calculate mean Social Harm for each scenario
+sh_sg1_means <- data.frame(colMeans(sh_sg1))
+sh_sg2_means <- data.frame(colMeans(sh_sg2))
+sh_sg3_means <- data.frame(colMeans(sh_sg3))
+
+#Check correlation of on/off Social Harm for each scenario
+sh_sg1_cor_p <- rcorr(as.matrix(sh_sg1))
+sh_sg2_cor_p <- rcorr(as.matrix(sh_sg2))
+sh_sg3_cor_p <- rcorr(as.matrix(sh_sg3))
+
+#output all correlation coefficients (r)
+sh_sg1_cor_p$r
+sh_sg2_cor_p$r
+sh_sg3_cor_p$r
+#output all p values (p)
+sh_sg1_cor_p$P
+sh_sg2_cor_p$P
+sh_sg3_cor_p$P
+
+#Create tables
+corrplot(sh_sg1_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #create a correlation table for SG1 - Social Harm
+         p.mat = sh_sg1_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+corrplot(sh_sg2_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #SG2 - Social Harm
+         p.mat = sh_sg2_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+corrplot(sh_sg3_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #SG3 - Social Harm
+         p.mat = sh_sg3_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+```
+
+                  #moral wrongness
+```{r}
+
+#moral wrongness
+summary(mw_sg1) 
+summary(mw_sg2)
+summary(mw_sg3)
+
+#moral wrongness standard devs
+sapply(mw_sg1, sd)
+sapply(mw_sg2, sd)
+sapply(mw_sg3, sd)
+
+#Calculate mean Moral Wrongness for each scenario
+mw_sg1_means <- data.frame(colMeans(mw_sg1))
+mw_sg2_means <- data.frame(colMeans(mw_sg2))
+mw_sg3_means <- data.frame(colMeans(mw_sg3))
+
+#Check correlation of on/off Moral Wrongness for each scenario
+mw_sg1_cor_p <- rcorr(as.matrix(mw_sg1))
+mw_sg2_cor_p <- rcorr(as.matrix(mw_sg2))
+mw_sg3_cor_p <- rcorr(as.matrix(mw_sg3))
+
+#output all correlation coefficients (r)
+mw_sg1_cor_p$r
+mw_sg2_cor_p$r
+mw_sg3_cor_p$r
+#output all p values (p)
+mw_sg1_cor_p$P
+mw_sg2_cor_p$P
+mw_sg3_cor_p$P
+
+#Create tables
+corrplot(mw_sg1_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #create a correlation table for SG1 - Moral Wrongness
+         p.mat = mw_sg1_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+corrplot(mw_sg2_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #SG2 - Moral Wrongness
+         p.mat = mw_sg2_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+corrplot(mw_sg3_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #SG3 - Moral Wrongness
+         p.mat = mw_sg3_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank")
+
+```
+
+                ## Correlation tests ##
+```{r}
+library(corrplot)
+library(Hmisc)
+
+
+#create correlograms with p-values (>.05) included
+
+bj_cor_p <- rcorr(as.matrix(bj))                                                #use rcorr to calculate both correlations and p-values simultaneously
+
+bj_cor_p$r                                                                      #extract just the correlation coefficients
+bj_cor_p$P                                                                      #extract just the p-values
+corrplot(bj_cor_p$r, 
+         type = "upper", 
+         method = "number", 
+         order = "alphabet",     #create a correlogram off all bj scenarios with insignificant correlations left blank
+         p.mat = bj_cor_p$P, 
+         sig.level = 0.05, 
+         insig = "blank") 
+
+#Create correlation and p-value matrices for all sg1 scens
+bj_cor_p <- rcorr(as.matrix(bj)) 
+cd_cor_p <- rcorr(as.matrix(cd)) 
+fn_cor_p <- rcorr(as.matrix(fn)) 
+pf_cor_p <- rcorr(as.matrix(pf)) 
+
+#Create correlograms for all sg1 scens
+corrplot(bj_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = bj_cor_p$P, sig.level = 0.05, insig = "blank") 
+corrplot(cd_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = cd_cor_p$P, sig.level = 0.05, insig = "blank") 
+corrplot(fn_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = fn_cor_p$P, sig.level = 0.05, insig = "blank") 
+corrplot(pf_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = pf_cor_p$P, sig.level = 0.05, insig = "blank") 
+
+#Create correlation and p-value matrices for all sg2 scens
+ec_cor_p <- rcorr(as.matrix(ec)) 
+ftp_cor_p <- rcorr(as.matrix(ftp)) 
+av_cor_p <- rcorr(as.matrix(av)) 
+ua_cor_p <- rcorr(as.matrix(ua))
+
+#Create correlograms for all sg2 scens
+corrplot(ec_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = ec_cor_p$P, sig.level = 0.05, insig = "blank") 
+corrplot(ftp_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = ftp_cor_p$P, sig.level = 0.05, insig = "blank") 
+corrplot(av_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = av_cor_p$P, sig.level = 0.05, insig = "blank") 
+corrplot(ua_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = ua_cor_p$P, sig.level = 0.05, insig = "blank") 
+
+#Create correlation and p-value matrices for all sg3 scens
+mj_cor_p <- rcorr(as.matrix(mj)) 
+dd_cor_p <- rcorr(as.matrix(dd)) 
+sc_cor_p <- rcorr(as.matrix(sc)) 
+de_cor_p <- rcorr(as.matrix(de))
+
+#Create correlograms for all sg3 scens
+corrplot(mj_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = mj_cor_p$P, sig.level = 0.05, insig = "blank") 
+corrplot(dd_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = dd_cor_p$P, sig.level = 0.05, insig = "blank") 
+corrplot(sc_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = sc_cor_p$P, sig.level = 0.05, insig = "blank") 
+corrplot(de_cor_p$r, type = "upper", method = "number", order = "alphabet",     
+         p.mat = de_cor_p$P, sig.level = 0.05, insig = "blank")
+
+```
+
+                ## Distribution checks ##
+```{r}
+#Preliminary tests/assumption checks
+
+#checking for normal distribution
+
+library(dplyr)
+library(ggpubr)
+
+#Bridge jumper online density plots                     #bridge jumper
+ggdensity(sg1$bj_on_img)                  
+ggdensity(sg1$bj_on_er)
+ggdensity(sg1$bj_on_soe)               
+ggdensity(sg1$bj_on_sh)
+ggdensity(sg1$bj_on_mw)
+#Bridge jumper online Shapiro-Wilk's tests
+shapiro.test(sg1$bj_on_img)
+shapiro.test(sg1$bj_on_er)
+shapiro.test(sg1$bj_on_soe)
+shapiro.test(sg1$bj_on_sh)
+shapiro.test(sg1$bj_on_mw)
+
+#Bridge jumper offline density plots
+ggdensity(sg1$bj_off_img)
+ggdensity(sg1$bj_off_er)
+ggdensity(sg1$bj_off_soe)
+ggdensity(sg1$bj_off_sh)
+ggdensity(sg1$bj_off_mw)
+#Bridge jumper offline Shapiro-Wilk's tests
+shapiro.test(sg1$bj_off_img)
+shapiro.test(sg1$bj_off_er)
+shapiro.test(sg1$bj_off_soe)
+shapiro.test(sg1$bj_off_sh)
+shapiro.test(sg1$bj_off_mw)
+
+#Charity donation online density plots                    #charity donation
+ggdensity(sg1$cd_on_img)
+ggdensity(sg1$cd_on_er)
+ggdensity(sg1$cd_on_soe)
+ggdensity(sg1$cd_on_sh)
+ggdensity(sg1$cd_on_mw)
+#Charity donation online Shapiro-Wilk's tests
+shapiro.test(sg1$cd_on_img)
+shapiro.test(sg1$cd_on_er)
+shapiro.test(sg1$cd_on_soe)
+shapiro.test(sg1$cd_on_sh)
+shapiro.test(sg1$cd_on_mw)
+
+#Charity donation offline density plots
+ggdensity(sg1$cd_off_img)
+ggdensity(sg1$cd_off_er)
+ggdensity(sg1$cd_off_soe)
+ggdensity(sg1$cd_off_sh)
+ggdensity(sg1$cd_off_mw)
+#Charity donation offline Shapiro-Wilk's tests
+shapiro.test(sg1$cd_off_img)
+shapiro.test(sg1$cd_off_er)
+shapiro.test(sg1$cd_off_soe)
+shapiro.test(sg1$cd_off_sh)
+shapiro.test(sg1$cd_off_mw)
+
+#Fake news online density plots                           #fake news
+ggdensity(sg1$fn_on_img)
+ggdensity(sg1$fn_on_er)
+ggdensity(sg1$fn_on_soe)
+ggdensity(sg1$fn_on_sh)
+ggdensity(sg1$fn_on_mw)
+#Fake news online Shapiro-Wilk's tests
+shapiro.test(sg1$fn_on_img)
+shapiro.test(sg1$fn_on_er)
+shapiro.test(sg1$fn_on_soe)
+shapiro.test(sg1$fn_on_sh)
+shapiro.test(sg1$fn_on_mw)
+
+#Fake news offline density plots
+ggdensity(sg1$fn_off_img)
+ggdensity(sg1$fn_off_er)
+ggdensity(sg1$fn_off_soe)
+ggdensity(sg1$fn_off_sh)
+ggdensity(sg1$fn_off_mw)
+#Fake news offline Shapiro-Wilk's test
+shapiro.test(sg1$fn_off_img)
+shapiro.test(sg1$fn_off_er)
+shapiro.test(sg1$fn_off_soe)
+shapiro.test(sg1$fn_off_sh)
+shapiro.test(sg1$fn_off_mw)
+
+#Public fight online density plots                      #public fight 
+ggdensity(sg1$pf_on_img)
+ggdensity(sg1$pf_on_er)
+ggdensity(sg1$pf_on_soe)
+ggdensity(sg1$pf_on_sh)
+ggdensity(sg1$pf_on_mw)
+#Public fight online Shapiro-Wilk's test
+shapiro.test(sg1$pf_on_img)
+shapiro.test(sg1$pf_on_er)
+shapiro.test(sg1$pf_on_soe)
+shapiro.test(sg1$pf_on_sh)
+shapiro.test(sg1$pf_on_mw)
+
+#Public fight offline density plots
+ggdensity(sg1$pf_off_img)
+ggdensity(sg1$pf_off_er)
+ggdensity(sg1$pf_off_soe)
+ggdensity(sg1$pf_off_sh)
+ggdensity(sg1$pf_off_mw)
+#Public fight offline Shapiro-Wilk's test
+shapiro.test(sg1$pf_off_img)
+shapiro.test(sg1$pf_off_er)
+shapiro.test(sg1$pf_off_soe)
+shapiro.test(sg1$pf_off_sh)
+shapiro.test(sg1$pf_off_mw)
+
+#Explicit content online density plots               #explicit content
+ggdensity(sg2$ec_on_img)
+ggdensity(sg2$ec_on_er)
+ggdensity(sg2$ec_on_soe)
+ggdensity(sg2$ec_on_sh)
+ggdensity(sg2$ec_on_mw)
+#Explicit content online Shapiro-Wilk's test
+shapiro.test(sg2$ec_on_img)
+shapiro.test(sg2$ec_on_er)
+shapiro.test(sg2$ec_on_soe)
+shapiro.test(sg2$ec_on_sh)
+shapiro.test(sg2$ec_on_mw)
+
+#Explicit content offline density plots
+ggdensity(sg2$ec_off_img)
+ggdensity(sg2$ec_off_er)
+ggdensity(sg2$ec_off_soe)
+ggdensity(sg2$ec_off_sh)
+ggdensity(sg2$ec_off_mw)
+#Explicit content offline Shapiro-Wilk's tests
+shapiro.test(sg2$ec_off_img)
+shapiro.test(sg2$ec_off_er)
+shapiro.test(sg2$ec_off_soe)
+shapiro.test(sg2$ec_off_sh)
+shapiro.test(sg2$ec_off_mw)
+
+#F the police online density plots                 #F the police
+ggdensity(sg2$ftp_on_img)
+ggdensity(sg2$ftp_on_er)
+ggdensity(sg2$ftp_on_soe)
+ggdensity(sg2$ftp_on_sh)
+ggdensity(sg2$ftp_on_mw)
+#F the police online Shapiro-Wilk's tests
+shapiro.test(sg2$ftp_on_img)
+shapiro.test(sg2$ftp_on_er)
+shapiro.test(sg2$ftp_on_soe)
+shapiro.test(sg2$ftp_on_sh)
+shapiro.test(sg2$ftp_on_mw)
+
+#F the police offline density plots
+ggdensity(sg2$ftp_off_img)
+ggdensity(sg2$ftp_off_er)
+ggdensity(sg2$ftp_off_soe)
+ggdensity(sg2$ftp_off_sh)
+ggdensity(sg2$ftp_off_mw)
+#F the police offline Shapiro-Wilk's tests
+shapiro.test(sg2$ftp_off_img)
+shapiro.test(sg2$ftp_off_er)
+shapiro.test(sg2$ftp_off_soe)
+shapiro.test(sg2$ftp_off_sh)
+shapiro.test(sg2$ftp_off_mw)
+
+#Anti-vax online density plots                  #Anti-vax
+ggdensity(sg2$av_on_img)
+ggdensity(sg2$av_on_er)
+ggdensity(sg2$av_on_soe)
+ggdensity(sg2$av_on_sh)
+ggdensity(sg2$av_on_mw)
+#Anti-vax online Shapiro-wilk's tests
+shapiro.test(sg2$av_on_img)
+shapiro.test(sg2$av_on_er)
+shapiro.test(sg2$av_on_soe)
+shapiro.test(sg2$av_on_sh)
+shapiro.test(sg2$av_on_mw)
+
+#Anti-vax offline density plots
+ggdensity(sg2$av_off_img)
+ggdensity(sg2$av_off_er)
+ggdensity(sg2$av_off_soe)
+ggdensity(sg2$av_off_sh)
+ggdensity(sg2$av_off_mw)
+#Anti-vax offline Shapiro-Wilk's tests
+shapiro.test(sg2$av_off_img)
+shapiro.test(sg2$av_off_er)
+shapiro.test(sg2$av_off_soe)
+shapiro.test(sg2$av_off_sh)
+shapiro.test(sg2$av_off_mw)
+
+#Unfounded accusation online density plots       #Unfounded accusation
+ggdensity(sg2$ua_on_img)
+ggdensity(sg2$ua_on_er)
+ggdensity(sg2$ua_on_soe)
+ggdensity(sg2$ua_on_sh)
+ggdensity(sg2$ua_on_mw)
+#Unfounded accusation Shapiro-Wilk's tests
+shapiro.test(sg2$ua_on_img)
+shapiro.test(sg2$ua_on_er)
+shapiro.test(sg2$ua_on_soe)
+shapiro.test(sg2$ua_on_sh)
+shapiro.test(sg2$ua_on_mw)
+
+#Unfounded accusation offline density plots
+ggdensity(sg2$ua_off_img)
+ggdensity(sg2$ua_off_er)
+ggdensity(sg2$ua_off_soe)
+ggdensity(sg2$ua_off_sh)
+ggdensity(sg2$ua_off_mw)
+#Unfounded accusation offline Shapiro-Wilk's tests
+shapiro.test(sg2$ua_off_img)
+shapiro.test(sg2$ua_off_er)
+shapiro.test(sg2$ua_off_soe)
+shapiro.test(sg2$ua_off_sh)
+shapiro.test(sg2$ua_off_mw)
+
+#Mean joke online density plots                  #Mean joke
+ggdensity(sg3$mj_on_img)
+ggdensity(sg3$mj_on_er)
+ggdensity(sg3$mj_on_soe)
+ggdensity(sg3$mj_on_sh)
+ggdensity(sg3$mj_on_mw)
+#Mean joke online Shapiro-Wilk's tests
+shapiro.test(sg3$mj_on_img)
+shapiro.test(sg3$mj_on_er)
+shapiro.test(sg3$mj_on_soe)
+shapiro.test(sg3$mj_on_sh)
+shapiro.test(sg3$mj_on_mw)
+
+#Mean joke offline density plots
+ggdensity(sg3$mj_off_img)
+ggdensity(sg3$mj_off_er)
+ggdensity(sg3$mj_off_soe)
+ggdensity(sg3$mj_off_sh)
+ggdensity(sg3$mj_off_mw)
+#Mean joke offline Shapiro-Wilk's tests
+shapiro.test(sg3$mj_off_img)
+shapiro.test(sg3$mj_off_er)
+shapiro.test(sg3$mj_off_soe)
+shapiro.test(sg3$mj_off_sh)
+shapiro.test(sg3$mj_off_mw)
+
+#Drug dealer online density plots            #Drug dealer
+ggdensity(sg3$dd_on_img)
+ggdensity(sg3$dd_on_er)
+ggdensity(sg3$dd_on_soe)
+ggdensity(sg3$dd_on_sh)
+ggdensity(sg3$dd_on_mw)
+#Drug dealer online Shapiro-Wilk's tests
+shapiro.test(sg3$dd_on_img)
+shapiro.test(sg3$dd_on_er)
+shapiro.test(sg3$dd_on_soe)
+shapiro.test(sg3$dd_on_sh)
+shapiro.test(sg3$dd_on_mw)
+
+#Drug dealer offline density plots
+ggdensity(sg3$dd_off_img)
+ggdensity(sg3$dd_off_er)
+ggdensity(sg3$dd_off_soe)
+ggdensity(sg3$dd_off_sh)
+ggdensity(sg3$dd_off_mw)
+#Drug dealer offline Shapiro-Wilk's tests
+shapiro.test(sg3$dd_off_img)
+shapiro.test(sg3$dd_off_er)
+shapiro.test(sg3$dd_off_soe)
+shapiro.test(sg3$dd_off_sh)
+shapiro.test(sg3$dd_off_mw)
+
+#Sexist comment online density plots                      #Sexist comment
+ggdensity(sg3$sc_on_img)
+ggdensity(sg3$sc_on_er)
+ggdensity(sg3$sc_on_soe)
+ggdensity(sg3$sc_on_sh)
+ggdensity(sg3$sc_on_mw)
+#Sexist comment online Shapiro-Wilk's tests
+shapiro.test(sg3$sc_on_img)
+shapiro.test(sg3$sc_on_er)
+shapiro.test(sg3$sc_on_soe)
+shapiro.test(sg3$sc_on_sh)
+shapiro.test(sg3$sc_on_mw)
+
+#Sexist comment offline density plots
+ggdensity(sg3$sc_off_img)
+ggdensity(sg3$sc_off_er)
+ggdensity(sg3$sc_off_soe)
+ggdensity(sg3$sc_off_sh)
+ggdensity(sg3$sc_off_mw)
+#Sexist comment offline Shapiro-Wilk's tests
+shapiro.test(sg3$sc_off_img)
+shapiro.test(sg3$sc_off_er)
+shapiro.test(sg3$sc_off_soe)
+shapiro.test(sg3$sc_off_sh)
+shapiro.test(sg3$sc_off_mw)
+
+#Drunk ex online density plots                        #Drunk ex
+ggdensity(sg3$de_on_img)
+ggdensity(sg3$de_on_er)
+ggdensity(sg3$de_on_soe)
+ggdensity(sg3$de_on_sh)
+ggdensity(sg3$de_on_mw)
+#Drunk ex online Shapiro-Wilk's tests
+shapiro.test(sg3$de_on_img)
+shapiro.test(sg3$de_on_er)
+shapiro.test(sg3$de_on_soe)
+shapiro.test(sg3$de_on_sh)
+shapiro.test(sg3$de_on_mw)
+
+#Drunk ex offline density plots
+ggdensity(sg3$de_off_img)
+ggdensity(sg3$de_off_er)
+ggdensity(sg3$de_off_soe)
+ggdensity(sg3$de_off_sh)
+ggdensity(sg3$de_off_mw)
+#Drunk ex offline Shapiro-Wilk's tests
+shapiro.test(sg3$de_off_img)
+shapiro.test(sg3$de_off_er)
+shapiro.test(sg3$de_off_soe)
+shapiro.test(sg3$de_off_sh)
+shapiro.test(sg3$de_off_mw)
+
+```
+
+
+                ## boxplots ##
+```{r}
+# sg1 boxplots
+
+boxplot(df$bj_off_img, df$bj_on_img)            #bridge jumper
+boxplot(df$bj_off_er, df$bj_on_er)
+boxplot(df$bj_off_soe, df$bj_on_soe)
+boxplot(df$bj_off_sh, df$bj_on_sh)
+boxplot(df$bj_off_mw, df$bj_on_mw)
+
+boxplot(df$cd_off_img, df$cd_on_img)            #charity donation
+boxplot(df$cd_off_er, df$cd_on_er)
+boxplot(df$cd_off_soe, df$cd_on_soe)
+boxplot(df$cd_off_sh, df$cd_on_sh)
+boxplot(df$cd_off_mw, df$cd_on_mw)
+
+boxplot(df$fn_off_img, df$fn_on_img)            #fake news
+boxplot(df$fn_off_er, df$fn_on_er)
+boxplot(df$fn_off_soe, df$fn_on_soe)
+boxplot(df$fn_off_sh, df$fn_on_sh)
+boxplot(df$fn_off_mw, df$fn_on_mw)
+
+boxplot(df$pf_off_img, df$pf_on_img)            #public fight
+boxplot(df$pf_off_er, df$pf_on_er)
+boxplot(df$pf_off_soe, df$pf_on_soe)
+boxplot(df$pf_off_sh, df$pf_on_sh)
+boxplot(df$pf_off_mw, df$pf_on_mw)
+
+# sg2 boxplots
+
+boxplot(df$ec_off_img, df$ec_on_img)            #explicit content
+boxplot(df$ec_off_er, df$ec_on_er)
+boxplot(df$ec_off_soe, df$ec_on_soe)
+boxplot(df$ec_off_sh, df$ec_on_sh)
+boxplot(df$ec_off_mw, df$ec_on_mw)
+
+boxplot(df$ftp_off_img, df$ftp_on_img)          # fuck the police   
+boxplot(df$ftp_off_er, df$ftp_on_er)
+boxplot(df$ftp_off_soe, df$ftp_on_soe)
+boxplot(df$ftp_off_sh, df$ftp_on_sh)
+boxplot(df$ftp_off_mw, df$ftp_on_mw)
+
+boxplot(df$av_off_img, df$av_on_img)            #anti-vax 
+boxplot(df$av_off_er, df$av_on_er)
+boxplot(df$av_off_soe, df$av_on_soe)
+boxplot(df$av_off_sh, df$av_on_sh)
+boxplot(df$av_off_mw, df$av_on_mw)
+
+boxplot(df$ua_off_img, df$ua_on_img)           #unfounded accusation
+boxplot(df$ua_off_er, df$ua_on_er)
+boxplot(df$ua_off_soe, df$ua_on_soe)
+boxplot(df$ua_off_sh, df$ua_on_sh)
+boxplot(df$ua_off_mw, df$ua_on_mw)
+
+# sg3 boxplots
+
+boxplot(df$mj_off_img, df$mj_on_img)           # mean joke
+boxplot(df$mj_off_er, df$mj_on_er)
+boxplot(df$mj_off_soe, df$mj_on_soe)
+boxplot(df$mj_off_sh, df$mj_on_sh)
+boxplot(df$mj_off_mw, df$mj_on_mw)
+
+boxplot(df$dd_off_img, df$dd_on_img)           # drug dealer
+boxplot(df$dd_off_er, df$dd_on_er)
+boxplot(df$dd_off_soe, df$dd_on_soe)
+boxplot(df$dd_off_sh, df$dd_on_sh)
+boxplot(df$dd_off_mw, df$dd_on_mw)
+
+boxplot(df$sc_off_img, df$sc_on_img)           # sexist comment
+boxplot(df$sc_off_er, df$sc_on_er)
+boxplot(df$sc_off_soe, df$sc_on_soe)
+boxplot(df$sc_off_sh, df$sc_on_sh)
+boxplot(df$sc_off_mw, df$sc_on_mw)
+
+boxplot(df$de_off_img, df$de_on_img)           # drunk ex
+boxplot(df$de_off_er, df$de_on_er)
+boxplot(df$de_off_soe, df$de_on_soe)
+boxplot(df$de_off_sh, df$de_on_sh)
+boxplot(df$de_off_mw, df$de_on_mw)
+
+```
+
+                ## Two-sample Wilcoxon tests ##
+```{r}
+
+#arguments being used for Wilcoxon tests
+
+wilcox.test(df$bj_off_er, df$bj_on_er,             #off/on variables
+            paired = T,                            #paired test
+            conf.int = T,                          #report confidence interval
+            conf.level = 0.99,                     #trim conf interval
+            alt = 'two.sided')                     #two-tailed test
+
+#The paired wilcoxon test will output V statistic and p value
+#If p value is >.05 there is no significant difference between this on/off 
+#variable (null hypothesis is not rejected).
+#If p <.05, there is a significant difference between medians (null is rejected)
+
+
+#checking for ties between on/off responses
+
+bj$onoff_er_equal <- c(bj$bj_off_er == bj$bj_on_er)     # create new column where 
+                                                        # TRUE = responses are tied,
+                                                        # FALSE = responses are different
+table(bj$onoff_er_equal)                                # Tally T/F responses
+
+#These two lines will tally how many ties there are between each pair of on/off
+#variables. If there are a lot of ties (indicated by TRUE values), this 
+#this indicates a lot of participants reported no difference between on/off
+#scenarios for the given variable.
+#Note that the Wilcoxon ignores ties, so if there are a lot more TRUE than FALSE
+#values, this suggests that there is not much difference across on/off responses
+#even without the Wilcoxon.
+
+
+#Scenario Group 1 - Wilcoxon tests and checking for ties
+
+#SG1 - bridge jumper
+wilcox.test(df$bj_off_img, df$bj_on_img,                       
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+bj$img_ties <- c(bj$bj_off_img == bj$bj_on_img)      
+table(bj$img_ties)
+
+wilcox.test(df$bj_off_er, df$bj_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+bj$er_ties <- c(bj$bj_off_er == bj$bj_on_er)      
+table(bj$er_ties)
+
+wilcox.test(df$bj_off_soe, df$bj_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                           #significant           
+bj$soe_ties <- c(bj$bj_off_soe == bj$bj_on_soe)      
+table(bj$soe_ties)
+
+wilcox.test(df$bj_off_sh, df$bj_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+bj$sh_ties <- c(bj$bj_off_sh == bj$bj_on_sh)      
+table(bj$sh_ties)
+
+wilcox.test(df$bj_off_mw, df$bj_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #very insignificant
+bj$mw_ties <- c(bj$bj_off_mw == bj$bj_on_mw)            
+table(bj$mw_ties)                                       #note the amount of ties
+
+
+#SG2 - charity donation
+
+wilcox.test(df$cd_off_img, df$cd_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+cd$img_ties <- c(cd$cd_off_img == cd$cd_on_img)
+table(cd$img_ties)                                      #same again here
+
+wilcox.test(df$cd_off_er, df$cd_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+cd$er_ties <- c(cd$cd_off_er == cd$cd_on_er)
+table(cd$er_ties)
+
+wilcox.test(df$cd_off_soe, df$cd_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (p = .031)
+cd$soe_ties <- c(cd$cd_off_soe == cd$cd_on_soe)
+table(cd$soe_ties)
+
+wilcox.test(df$cd_off_sh, df$cd_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant
+cd$sh_ties <- c(cd$cd_off_sh == cd$cd_on_sh)
+table(cd$sh_ties)                                       #still quite a few ties though
+
+wilcox.test(df$cd_off_mw, df$cd_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+cd$mw_ties <- c(cd$cd_off_mw == cd$cd_on_mw)
+table(cd$mw_ties)
+
+#SG1 - fake news
+wilcox.test(df$fn_off_img, df$fn_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+fn$img_ties <- c(fn$fn_off_img == fn$fn_on_img)
+table(fn$img_ties)                                      #lots of ties
+
+wilcox.test(df$fn_off_er, df$fn_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+fn$er_ties <- c(fn$fn_off_er == fn$fn_on_er)
+table(fn$er_ties) 
+
+wilcox.test(df$fn_off_soe, df$fn_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (p .001)
+fn$soe_ties <- c(fn$fn_off_soe == fn$fn_on_soe)
+table(fn$soe_ties)                      #low ties here suggest a lot of 
+                                        #variability between size of effect for 
+                                        #on/off fake news scenarios
+
+wilcox.test(df$fn_off_sh, df$fn_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+fn$sh_ties <- c(fn$fn_off_sh == fn$fn_on_sh)
+table(fn$sh_ties)                       
+
+wilcox.test(df$fn_off_mw, df$fn_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+fn$mw_ties <- c(fn$fn_off_mw == fn$fn_on_mw)
+table(fn$mw_ties) 
+
+#SG1 - public fight
+wilcox.test(df$pf_off_img, df$pf_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+pf$img_ties <- c(pf$pf_off_img == pf$pf_on_img)
+table(pf$img_ties) 
+
+wilcox.test(df$pf_off_er, df$pf_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,            
+            alt = 'two.sided')                  #significant .001
+pf$er_ties <- c(pf$pf_off_er == pf$pf_on_er)
+table(pf$er_ties)                               #low ties  
+
+summary(pf$pf_off_er)
+summary(pf$pf_on_er)
+
+wilcox.test(df$pf_off_soe, df$pf_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+pf$soe_ties <- c(pf$pf_off_soe == pf$pf_on_soe)
+table(pf$soe_ties)                      
+
+wilcox.test(df$pf_off_sh, df$pf_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+pf$sh_ties <- c(pf$pf_off_sh == pf$pf_on_sh)
+table(pf$sh_ties)                               #low ties
+
+wilcox.test(df$pf_off_mw, df$pf_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+pf$mw_ties <- c(pf$pf_off_mw == pf$pf_on_mw)
+table(pf$mw_ties)
+
+#SG2 - explicit content
+wilcox.test(df$ec_off_img, df$ec_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+ec$img_ties <- c(ec$ec_off_img == ec$ec_on_img)
+table(ec$img_ties)                      
+
+wilcox.test(df$ec_off_er, df$ec_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')   
+ec$er_ties <- c(ec$ec_off_er == ec$ec_on_er)
+table(ec$er_ties) 
+
+wilcox.test(df$ec_off_soe, df$ec_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant
+ec$soe_ties <- c(ec$ec_off_soe == ec$ec_on_soe)
+table(ec$soe_ties)                                      #low ties
+
+wilcox.test(df$ec_off_sh, df$ec_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+ec$sh_ties <- c(ec$ec_off_sh == ec$ec_on_sh)
+table(ec$sh_ties)                                       #low ties
+
+wilcox.test(df$ec_off_mw, df$ec_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant
+ec$mw_ties <- c(ec$ec_off_mw == ec$ec_on_mw)
+table(ec$mw_ties) 
+
+#SG2 - f the police
+wilcox.test(df$ftp_off_img, df$ftp_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #nearly significant
+ftp$img_ties <- c(ftp$ftp_off_img == ftp$ftp_on_img)
+table(ftp$img_ties)                                     #lots of ties
+
+wilcox.test(df$ftp_off_er, df$ftp_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')   
+ftp$er_ties <- c(ftp$ftp_off_er == ftp$ftp_on_er)
+table(ftp$er_ties) 
+
+wilcox.test(df$ftp_off_soe, df$ftp_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                         
+ftp$soe_ties <- c(ftp$ftp_off_soe == ftp$ftp_on_soe)
+table(ftp$soe_ties)                                      #low ties
+
+wilcox.test(df$ftp_off_sh, df$ftp_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (.006)
+ftp$sh_ties <- c(ftp$ftp_off_sh == ftp$ftp_on_sh)
+table(ftp$sh_ties)                                       
+
+wilcox.test(df$ftp_off_mw, df$ftp_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (.049)
+ftp$mw_ties <- c(ftp$ftp_off_mw == ftp$ftp_on_mw)
+table(ftp$mw_ties)
+
+#SG2 - anti-vax
+
+wilcox.test(df$av_off_img, df$av_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          
+av$img_ties <- c(av$av_off_img == av$av_on_img)
+table(av$img_ties)  
+
+wilcox.test(df$av_off_er, df$av_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')   
+av$er_ties <- c(av$av_off_er == av$av_on_er)
+table(av$er_ties) 
+
+wilcox.test(df$av_off_soe, df$av_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (.00004)   
+av$soe_ties <- c(av$av_off_soe == av$av_on_soe)
+table(av$soe_ties)                                      #low ties
+
+wilcox.test(df$av_off_sh, df$av_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                       
+av$sh_ties <- c(av$av_off_sh == av$av_on_sh)
+table(av$sh_ties)                            
+
+wilcox.test(df$av_off_mw, df$av_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                        
+av$mw_ties <- c(av$av_off_mw == av$av_on_mw)
+table(av$mw_ties)
+
+#SG2 - Unfounded accusation
+
+wilcox.test(df$ua_off_img, df$ua_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (.01)
+ua$img_ties <- c(ua$ua_off_img == ua$ua_on_img)
+table(ua$img_ties)                                      #high ties though
+
+wilcox.test(df$ua_off_er, df$ua_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')   
+ua$er_ties <- c(ua$ua_off_er == ua$ua_on_er)
+table(ua$er_ties) 
+
+wilcox.test(df$ua_off_soe, df$ua_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                       #not significant when rounded up     
+ua$soe_ties <- c(ua$ua_off_soe == ua$ua_on_soe)
+table(ua$soe_ties)                                      
+
+wilcox.test(df$ua_off_sh, df$ua_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (.04)
+ua$sh_ties <- c(ua$ua_off_sh == ua$ua_on_sh)
+table(ua$sh_ties)                                       #low ties     
+
+wilcox.test(df$ua_off_mw, df$ua_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (.017)
+ua$mw_ties <- c(ua$ua_off_mw == ua$ua_on_mw)
+table(ua$mw_ties)                                       
+
+#SG3 - mean joke
+
+wilcox.test(df$mj_off_img, df$mj_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (.020)
+mj$img_ties <- c(mj$mj_off_img == mj$mj_on_img)
+table(mj$img_ties)                                      #high ties though
+
+wilcox.test(df$mj_off_er, df$mj_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')   
+mj$er_ties <- c(mj$mj_off_er == mj$mj_on_er)
+table(mj$er_ties) 
+
+wilcox.test(df$mj_off_soe, df$mj_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                            
+mj$soe_ties <- c(mj$mj_off_soe == mj$mj_on_soe)
+table(mj$soe_ties)                                      
+
+wilcox.test(df$mj_off_sh, df$mj_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (.019)
+mj$sh_ties <- c(mj$mj_off_sh == mj$mj_on_sh)            
+table(mj$sh_ties)                                       #low ties
+
+wilcox.test(df$mj_off_mw, df$mj_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+mj$mw_ties <- c(mj$mj_off_mw == mj$mj_on_mw)
+table(mj$mw_ties)  
+
+#SG3 - drug dealer
+
+wilcox.test(df$dd_off_img, df$dd_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                          #significant (.017)
+dd$img_ties <- c(dd$dd_off_img == dd$dd_on_img)
+table(dd$img_ties)                                     
+
+wilcox.test(df$dd_off_er, df$dd_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')   
+dd$er_ties <- c(dd$dd_off_er == dd$dd_on_er)
+table(dd$er_ties) 
+
+wilcox.test(df$dd_off_soe, df$dd_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                            
+dd$soe_ties <- c(dd$dd_off_soe == dd$dd_on_soe)
+table(dd$soe_ties)                                      
+
+wilcox.test(df$dd_off_sh, df$dd_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                         
+dd$sh_ties <- c(dd$dd_off_sh == dd$dd_on_sh)            
+table(dd$sh_ties)                                       
+
+wilcox.test(df$dd_off_mw, df$dd_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+dd$mw_ties <- c(dd$dd_off_mw == dd$dd_on_mw)
+table(dd$mw_ties)
+
+#SG3 - sexist comment
+
+wilcox.test(df$sc_off_img, df$sc_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+sc$img_ties <- c(sc$sc_off_img == sc$sc_on_img)
+table(sc$img_ties)                                     
+
+wilcox.test(df$sc_off_er, df$sc_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')   
+sc$er_ties <- c(sc$sc_off_er == sc$sc_on_er)
+table(sc$er_ties) 
+
+wilcox.test(df$sc_off_soe, df$sc_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                            
+sc$soe_ties <- c(sc$sc_off_soe == sc$sc_on_soe)
+table(sc$soe_ties)                                      
+
+wilcox.test(df$sc_off_sh, df$sc_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                         
+sc$sh_ties <- c(sc$sc_off_sh == sc$sc_on_sh)            
+table(sc$sh_ties)                                       
+
+wilcox.test(df$sc_off_mw, df$sc_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+sc$mw_ties <- c(sc$sc_off_mw == sc$sc_on_mw)
+table(sc$mw_ties)
+
+#SG3 - drunk ex
+
+wilcox.test(df$de_off_img, df$de_on_img,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+de$img_ties <- c(de$de_off_img == de$de_on_img)
+table(de$img_ties)                                     
+
+wilcox.test(df$de_off_er, df$de_on_er,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')   
+de$er_ties <- c(de$de_off_er == de$de_on_er)
+table(de$er_ties) 
+
+wilcox.test(df$de_off_soe, df$de_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')       
+de$soe_ties <- c(de$de_off_soe == de$de_on_soe)
+table(de$soe_ties)                                      #low ties                      
+
+wilcox.test(df$de_off_sh, df$de_on_sh,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                         
+de$sh_ties <- c(de$de_off_sh == de$de_on_sh)            
+table(de$sh_ties)                                       
+
+wilcox.test(df$de_off_mw, df$de_on_mw,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+de$mw_ties <- c(de$de_off_mw == de$de_on_mw)
+table(de$mw_ties)
+```
+
+
+                ## Creating large dataframe for evaluating all scenarios ##
+```{r}
+#dataframe needs to contain the following info at this stage:
+# which scenario, which variable, mean online score, mean off score,
+#discrepancy between the two, is the on/off mean higher?, correlation coefficient,
+# Wilcoxon V statistic, Wilcoxon P value
+
+sg1scenarios <- c("bj", "bj", "bj", "bj", "bj", #just going to enter each variable 5 times for now. Trying to get this done quickly
+              "cd", "cd", "cd", "cd", "cd",
+              "fn", "fn", "fn", "fn", "fn",
+              "pf", "pf", "pf", "pf", "pf")
+sg1variables <- c("img", "er", "soe", "sh", "mw",
+                   "img", "er", "soe", "sh", "mw",
+                   "img", "er", "soe", "sh", "mw",
+                   "img", "er", "soe", "sh", "mw")
+
+sg1_on_means <- c(6.045, 5.424, 84.560, 6.060, 6.439,  #all online means for each variable - bj
+                  6.287, 3.560, 8.863, 3.333, 4.818,   #cd
+                  6.515, 3.075, 34.863, 4.090, 4.045,  #fn
+                  6.287, 3.348, 5.696, 3.939, 4.439)   #pf
+
+sg1_off_means <- c(5.984, 5.545, 18.166, 6.060, 6.439, #bj
+                   6.287, 3.878, 3.181, 2.969, 4.681,  #cd
+                   6.545, 3.196, 23.272, 4.045, 4.136, #fn
+                   6.196, 3.863, 3.348, 4.166, 4.681)  #pf
+
+sg1_eval <- data.frame(sg1scenarios, sg1variables, sg1_on_means, sg1_off_means)
+
+sg2scenarios <- c("ec", "ec", "ec", "ec", "ec",
+                  "ftp", "ftp", "ftp", "ftp", "ftp",
+                  "av", "av", "av", "av", "av",
+                  "ua", "ua", "ua", "ua", "ua")
+
+sg2variables <- c("img", "er", "soe", "sh", "mw",
+                  "img", "er", "soe", "sh", "mw",
+                  "img", "er", "soe", "sh", "mw",
+                  "img", "er", "soe", "sh", "mw")
+
+sg2_on_means <- c(6.176, 4.073, 110.514, 4.720, 5.088,  #ec
+                  6.602, 3.897, 114.926, 4.220, 4.176,  #ftp
+                  6.367, 4.073, 62.470, 4.514, 4.411,  #av
+                  6.250, 3.867, 35.352, 4.808, 5.132)  #ua
+
+sg2_off_means <- c(6.117, 4.088, 29.676, 4.661, 4.647,
+                   6.411, 4.191, 24.485, 4.617, 4.397,
+                   6.264, 4.205, 9.779, 4.514, 4.352,
+                   5.926, 4.029, 22.485, 4.455, 4.735)
+
+sg2_eval <- data.frame(sg2scenarios, sg2variables, sg2_on_means, sg2_off_means)
+sg2_eval
+
+sg3scenarios <- c("mj", "mj", "mj", "mj", "mj",
+                  "dd", "dd", "dd", "dd", "dd",
+                  "sc", "sc", "sc", "sc", "sc",
+                  "de", "de", "de", "de", "de")
+
+sg3variables <- c("img", "er", "soe", "sh", "mw",
+                  "img", "er", "soe", "sh", "mw",
+                  "img", "er", "soe", "sh", "mw",
+                  "img", "er", "soe", "sh", "mw")
+
+sg3_on_means <- c(6.173, 3.739, 1.536, 3.927, 4.362,
+                  5.608, 4.405, 4.652, 5.318, 5.463,
+                  6.202, 4.057, 6.405, 4.666, 4.797,
+                  6.318, 4.014, 5.072, 4.811, 4.811)
+
+sg3_off_means <- c(6.420, 3.913, 1.550, 3.608, 4.188,
+                   5.985, 4.362, 2.681, 5.202, 5.550,
+                   6.405, 4.260, 2.826, 4.739, 4.855,
+                   6.231, 4.115, 4.205, 4.826, 4.739)
+
+sg3_eval <- data.frame(sg3scenarios, sg3variables, sg3_on_means, sg3_off_means)
+sg3_eval
+
+#that could have been much quicker. Should have found a way to automate it but oh well, still learning
+#now to stack all three of these dataframes together using rbind()
+#all column names need to be the same to use rbind function
+#now to rename columns
+
+sg1_eval <- rename(sg1_eval, scenario = sg1scenarios)
+sg1_eval <- rename(sg1_eval, variable = sg1variables)
+sg1_eval <- rename(sg1_eval, on_mean = sg1_on_means)
+sg1_eval <- rename(sg1_eval, off_mean = sg1_off_means)
+
+sg2_eval <- rename(sg2_eval, scenario = sg2scenarios)
+sg2_eval <- rename(sg2_eval, variable = sg2variables)
+sg2_eval <- rename(sg2_eval, on_mean = sg2_on_means)
+sg2_eval <- rename(sg2_eval, off_mean = sg2_off_means)
+
+sg3_eval <- rename(sg3_eval, scenario = sg3scenarios)
+sg3_eval <- rename(sg3_eval, variable = sg3variables)
+sg3_eval <- rename(sg3_eval, on_mean = sg3_on_means)
+sg3_eval <- rename(sg3_eval, off_mean = sg3_off_means)
+
+eval <- rbind(sg1_eval, sg2_eval, sg3_eval)    #create new dataframe called eval
+                                                #this contains all means for all variables
+
+#calculate difference between on/off means and put this into a column
+eval$onoff_discrepancy <- c(eval$on_mean - eval$off_mean)
+#convert all values in this column into positive integers
+eval$onoff_discrepancy <- abs(eval$onoff_discrepancy)
+
+#create new column which indicates whether on or offline mean score was higher
+eval$highest_mean <- ifelse(eval$on_mean > eval$off_mean, "on",
+                            ifelse (eval$on_mean < eval$off_mean, "off", "even"))
+
+
+eval #looking good
+
+
+
+
+
+#now want to add two new columns to "eval"
+#One containing correlation coefficients and one containing p values for these coefficients
+#I figure it's probably easiest to create a new vector for each, and then just add
+#this vector to the "eval" dataframe as a new column
+
+#start with just coefficients for now
+#create new empty vector
+onoff_cor <- vector()
+
+#run correlation tests for a given pair of on/off variables
+#these correlations are being pulled from the raw data (df) ignoring na values
+test1 <- cor.test(df$bj_on_img, df$bj_off_img, na.rm = TRUE)
+
+#the coefficients and p values can then be pulled using these two commands
+test1$estimate #correlation coefficient
+test1$p.value  #p-value
+
+test2 <- cor.test(df$cd_on_img, df$cd_off_img, na.rm = TRUE) #do this a few times over as a demo
+test3 <- cor.test(df$fn_on_img, df$fn_off_img, na.rm = TRUE)
+
+#then add the correlation coefficients to the empty vector created earlier
+onoff_cor <- rbind(test1$estimate) #note first time a value is added the arguments are slightly different
+onoff_cor <- rbind(onoff_cor, test2$estimate)
+onoff_cor <- rbind(onoff_cor, test3$estimate)
+
+#print vector containing all correlation coefficients
+onoff_cor
+
+#really should work out how to automate this process
+#first try automate running the correlation tests
+
+
+
+
+#actually might be a far easier way of doing this without the need for loops
+#using the 'correlation' package I can quickly find ALL correlations in a df
+#first try running correlations for all possible variables in a scen group
+install.packages("correlation")
+library(correlation)
+
+allsg1corr <- data.frame(correlation(sg1,
+        include_factors = TRUE,
+        method = "auto",
+        ))
+
+#the following dataframe now contains ALL possible correlations in sg1
+allsg1corr
+
+#have painstakingly gone through this large dataframe and found all the rows
+#which report on/off correlations
+#I now want to pull the correlation coefficients and p values and put them
+#in a new dataframe
+sg1corr <- allsg1corr[c(5,44,82,119,155,350,379,407,434,460,595,614,632,
+                             649,665,740,749,757,764,770), c(3,9)]
+
+#now do the same for sg2 & sg3
+allsg2corr <- data.frame(correlation(sg2,
+                                     include_factors = TRUE,
+                                     method = "auto",
+))
+
+allsg3corr <- data.frame(correlation(sg3,
+                                     include_factors = TRUE,
+                                     method = "auto",
+))
+
+#rows with relevant info should be the same as with 'allsg1corr'
+#pull them into smaller focused dataframes
+sg2corr <- allsg2corr[c(5,44,82,119,155,350,379,407,434,460,595,614,632,
+                        649,665,740,749,757,764,770), c(3,9)]
+sg3corr <- allsg3corr[c(5,44,82,119,155,350,379,407,434,460,595,614,632,
+                        649,665,740,749,757,764,770), c(3,9)]
+
+#now try combine these three 'sgXcorr' dataframes into one long dataframe
+allcorr_and_pvalues <- rbind(sg1corr,sg2corr,sg3corr)
+
+#renumber the rows and columns in this long dataframe
+#60 observations
+row.names(allcorr_and_pvalues) <- 1:nrow(allcorr_and_pvalues)
+colnames(allcorr_and_pvalues) <- c("onoff correlation", "correl p")
+
+#add all coefficients and p values to 'eval' dataframe
+eval1 <- cbind(eval, allcorr_and_pvalues)
+
+
+
+
+
+#have come back to this after writing my results section and realised I also
+#want to include standard deviations alongside my means
+#start by calculating standard deviations for each of the scen groups
+sg1_sd <- sapply(sg1, sd)
+sg2_sd <- sapply(sg2, sd)
+sg3_sd <- sapply(sg3, sd)
+
+#then separate out standard devs for on/off variants of each scen group
+sg1_on_sd <- as.vector(sg1_sd[c(1:5, 11:15, 21:25, 31:35)])
+sg1_off_sd <- as.vector(sg1_sd[c(6:10, 16:20, 26:30, 36:40)]) #using as.vector() to pull out just the raw numbers
+
+sg2_on_sd <- as.vector(sg2_sd[c(1:5, 11:15, 21:25, 31:35)])
+sg2_off_sd <- as.vector(sg2_sd[c(6:10, 16:20, 26:30, 36:40)])
+        
+sg3_on_sd <- as.vector(sg3_sd[c(1:5, 11:15, 21:25, 31:35)])
+sg3_off_sd <- as.vector(sg3_sd[c(6:10, 16:20, 26:30, 36:40)])
+
+#stack the SD's for on/off variants of each sg together to make one list
+on_sd <- c(sg1_on_sd, sg2_on_sd, sg3_on_sd)
+off_sd <- c(sg1_off_sd, sg2_off_sd, sg3_off_sd)
+
+#each of these lists now need to be inserted into eval1 next to the corresponding on/off mean column
+#using the 'tibble' package to do this
+library(tibble)
+eval1 <- add_column(eval1, on_sd, .after = 3) #add list of on SD's after the on means column
+eval1 <- add_column(eval1, off_sd, .after = 5) #add list of off SD's after the off means column
+
+#check it out
+eval1
+#looking good!
+
+
+
+#need to add on/off wilcoxon test results to this
+#will have a go at automating this process
+
+#this is the basic stucture of the wilcox.test
+wilcox.test(df$de_off_img, df$de_on_img,    #can use df[[x]] and df[[y]] here
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+de$img_ties <- c(de$de_off_img == de$de_on_img)#  checking for ties, come back 2 this
+table(de$img_ties)  
+
+#if I store the results of wilcox.test as x....
+x <- wilcox.test(sg1[[1]], sg1[[6]],# pulling column indices rather than names
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')
+#I can then pull individual values as follows
+x$statistic#  test statistic (W/V value)
+x$p.value#    p-value
+
+#ideally looking for a way to directly add to the eval1 table inside the for loop
+#duplicate eval1 as eval2 for providence
+eval2 <- eval1
+
+# Create a list of each vignette's on/off dataframe
+df_list <- list(bj, cd, fn, pf, ec, ftp, av, ua, mj, dd, sc, de)
+
+# Create empty vectors to store the results of for loop
+p_values <- c()
+test_statistics <- c()
+column1 <- c()
+column2 <- c()
+
+# Loop over each dataframe in the list
+for (df in df_list) {
+  # Loop over each pair of columns in the dataframe
+  for (i in 1:(ncol(df)-5)) {
+    x <- wilcox.test(df[[i]], df[[i+5]], #  parameters of wilcox.tests
+                     paired = T, conf.int = T, 
+                     conf.level = 0.99, 
+                     alt = 'two.sided')
+    p_values <- c(p_values, x$p.value)#   grab p.value and add to empty vector
+    test_statistics <- c(test_statistics, x$statistic)# grab V statistic
+    column1 <- c(column1, names(df)[i])#    grab names of variables tested
+    column2 <- c(column2, names(df)[i+5])
+  }
+}
+
+# Combine the results into a data.frame
+pilot_wilcox_results <- data.frame(column1, column2, p_values, test_statistics)
+
+#spot check results in pilot_wilcox_results
+#1st pair of on/off variables in sg1
+wilcox.test(sg1$bj_on_img, sg1$bj_off_img, paired = T)# p.value = 0.576, V = 131.5
+#last pair of on/off variables in sg1
+wilcox.test(sg1$pf_on_img, sg1$pf_off_img, paired = T)# p = 0.364, v = 76
+#1st pair of vars in sg2
+wilcox.test(sg2$ec_on_img, sg2$ec_off_img, paired = T)# p = 0.678, V = 206
+#1st pair of vars in sg3
+wilcox.test(sg3$mj_on_img, sg3$mj_off_img, paired = T)# p = 0.020, V = 72
+#all looks good! 
+
+#round wilcox p values to 3 dec places
+pilot_wilcox_results[[3]] <- round(pilot_wilcox_results[[3]], 3)
+
+#add Wilcoxon test and p values to eval2 dataframe
+eval2 <- cbind(eval2, pilot_wilcox_results[c("test_statistics","p_values")])
+
+
+
+
+#now need to tidy up the mega results table a bit
+#round the p values in eval2 to 3 dec places
+eval2$`correl p` <- round(eval2$`correl p`, 3)
+
+#round all other values to 2 dec places
+eval2[ ,c(3:7,9)] <- round(eval2[ ,c(3:7,9)], 2)
+
+#duplicate eval2 at this point
+eval3 <- eval2
+
+#I want to pull smaller results table out of this mega results table, but
+#first need to make sure it's formatted appropriately for the thesis
+
+
+#put all the standard devs in brackets next to the means in a single column
+eval3$on_mean <- paste(eval3$on_mean, " (", round(eval3$on_sd, 2), ")", sep = "")
+#and remove the now unneeded standard devs column
+eval3 <- eval3 %>% 
+  select(-on_sd)
+
+#do the same again for offline standard devs
+eval3$off_mean <- paste(eval3$off_mean, " (", round(eval3$off_sd, 2), ")", sep = "")
+eval3 <- eval3 %>% 
+  select(-off_sd)
+
+#add a single asterisk to correlation coefficients which are signif at <.05
+#add a double asterisk to correlation coefficients which are signif at <.001
+eval3$`onoff correlation` <- ifelse(eval3$`correl p` < 0.001, paste0(format(eval3$`onoff correlation`, nsmall = 2), "**"),
+            ifelse(eval3$`correl p` < 0.05, paste0(format(eval3$`onoff correlation`, nsmall = 2), "*"),
+            format(eval3$`onoff correlation`, nsmall = 2)))
+#then remove the unneeded 'correl p' column
+eval3 <- eval3 %>% 
+  select(-'correl p')
+
+#now repeat for the wilcoxon test statistics
+#the range of p values is much lower here, so only need to worry about adding a
+#single asterisk to flag signif at the <.05 level
+eval3$test_statistics <- ifelse(eval3$p_values < 0.05, paste0(format(eval3$test_statistics, nsmall = 2), "*"),
+            format(eval3$test_statistics, nsmall = 2))
+#and again remove the now unneeded p value column
+eval3 <- eval3 %>% 
+  select(-p_values)
+
+#now move the 'onoff_discrepancy' column to the end and relabel it as 'effect_size'
+eval3 <- eval3[, c("scenario","variable","on_mean","off_mean","highest_mean",     
+"onoff correlation", "test_statistics","onoff_discrepancy"  )] #reshuffle column
+names(eval3)[names(eval3) == "onoff_discrepancy"] <- "effect_size" #rename
+
+
+
+#10/4/23 - have just realised I need a better way to report effect sizes than 
+#just discrepancy between means. bugger.
+#going to try add new column reporting effect sizes using cohen's d
+library(effsize)
+
+x <- cohen.d(sg1$bj_on_img, sg1$bj_off_img) #store results of Cohen's d test on bj_on/off_img
+
+x$estimate #pull cohen's d estimate
+x$magnitude #pull whether effect size (d) is negligable/small/medium/large
+x$conf.int  #pull confidence interval. (95% confidence that the true value of d lies between these two values)
+
+#now need to design a loop which checks cohens d for each on.off pair
+
+# Create a list of each vignette's on/off dataframe
+df_list <- list(bj, cd, fn, pf, ec, ftp, av, ua, mj, dd, sc, de)
+
+# Create empty vectors to store the results of for loop
+d_values <- c()
+d_magnitudes <- c()
+d_conf_low <- c()
+d_conf_high <- c()
+column1 <- c()
+column2 <- c()
+
+
+
+#pulling confidence intervals so best to set seed before running loop
+set.seed(123)
+# Loop over each dataframe in the list
+for (df in df_list) {
+  # Loop over each pair of columns in the dataframe
+  for (i in 1:(ncol(df)-5)) {
+    x <- cohen.d(df[[i]], df[[i+5]])
+    d_values <- c(d_values, x$estimate)#   grab d value and add to empty vector
+    d_magnitudes <- c(d_magnitudes, x$magnitude)# grab masgnitude
+    d_conf_low <- c(d_conf_low, x$conf.int[1])
+    d_conf_high <- c(d_conf_high, x$conf.int[2]) #add low/high CI's
+    column1 <- c(column1, names(df)[i])#    grab names of variables tested
+    column2 <- c(column2, names(df)[i+5])
+  }
+}
+
+
+# Combine the results into a data.frame
+pilot_d_results <- data.frame(column1, column2, d_values, d_magnitudes,
+                              d_conf_low, d_conf_high)
+
+#spot check
+cohen.d(sg1$fn_on_er, sg1$fn_off_er) #d = -0.07 (neg)
+cohen.d(sg2$ftp_on_mw, sg2$ftp_off_mw) #d = -0.108 (neg)
+cohen.d(sg3$sc_on_sh, sg3$sc_off_sh) #d = -0.043 (neg)
+#all good
+
+#for some reason the d_results df contains twice the amount of rows I expect it to
+#seems like the loop is running through twice
+#don't have time to sort this out rn and spot checks suggest that all the values
+#are sound despite every row being doubled in the df.
+#quickest way to solve is just kill the bottom half of the df
+#all results are contaned within the first 60 rows of the df
+pilot_d_results <- data.frame(pilot_d_results[1:60, ])
+
+#relabel all the 1's, 2's and 3 in the magnitude column
+pilot_d_results$d_magnitudes <- 
+  ifelse(pilot_d_results$d_magnitudes == 1, "negligible", 
+         ifelse(pilot_d_results$d_magnitudes == 2, "small",
+                ifelse(pilot_d_results$d_magnitudes == 3, "medium", 
+                       pilot_d_results$d_magnitudes)))
+
+#round everything to 2 dec places
+pilot_d_results[ ,c(3,5,6)] <- round(pilot_d_results[ ,c(3,5,6)], 2)
+
+#now add relevant columns to eval3
+eval3 <- cbind(eval3, pilot_d_results[c("d_values", "d_magnitudes",
+                                        "d_conf_low", "d_conf_high")])
+
+#kill the pre-existing "effect_size" column in eval3, as d values now being used
+eval3 <- eval3[ ,-8]
+
+table(eval3$d_magnitudes)
+#majority (43) of effect sizes are negligible (d < 0.2)
+#some (16) effect sizes are small (d = 0.2-0.49)
+#only 1 medium effect size (d = 0.57) in on/off Anti-vax size of effect
+#this is useful to know, but not strictly necessary to include as seperate column in thesis results table
+
+
+
+#ok, fairly happy with the format of this results table
+#now I can pull smaller results tables out of this mega table for inclusion in the thesis
+#want to create subset tables for each DV(img, er, soe, sh, mw)
+
+#all pilot imageability results
+pi_img <- eval3[grep("img", eval3[,2]),]
+
+#er
+pi_er <- eval3[grep("er", eval3[,2]),]
+
+#soe
+pi_soe <- eval3[grep("soe", eval3[,2]),]
+
+#sh
+pi_sh <- eval3[grep("sh", eval3[,2]),]
+
+#mw
+pi_mw <- eval3[grep("mw", eval3[,2]),]
+
+
+#and, finally, create a new excel workbook and put each of these results tables
+#on their own sheet using the 'openxlsx' package
+
+# create a new workbook
+wb <- createWorkbook()
+
+# add the dataframe to the workbook
+addWorksheet(wb, "Sheet1")
+writeData(wb, "Sheet1", pi_img)
+
+addWorksheet(wb, "Sheet2")
+writeData(wb, "Sheet2", pi_er)
+
+addWorksheet(wb, "Sheet3")
+writeData(wb, "Sheet3", pi_soe)
+
+addWorksheet(wb, "Sheet4")
+writeData(wb, "Sheet4", pi_sh)
+
+addWorksheet(wb, "Sheet5")
+writeData(wb, "Sheet5", pi_mw)
+
+
+# save the workbook
+saveWorkbook(wb, "pilot_results_tables_FINAL.xlsx")
+
+
+
+
+
+wilcox.test(df$fn_off_soe, df$fn_on_soe,
+            paired = T,                            
+            conf.int = T,                          
+            conf.level = 0.99,                    
+            alt = 'two.sided')                           #significant           
+fn$soe_ties <- c(fn$fn_off_soe == fn$fn_on_soe)      
+table(fn$soe_ties)
+```
+
+
